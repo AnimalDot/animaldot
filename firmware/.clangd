@@ -1,0 +1,13 @@
+# Fix clangd "expected exactly one compiler job in ''" for .ino files.
+# .ino files are not in compile_commands.json (PlatformIO builds src/ only),
+# so clangd has no compiler job. This gives .ino files a single job so they parse as C++.
+
+If:
+  PathMatch: .*\.ino$
+CompileFlags:
+  Add:
+    - -x
+    - c++
+    - -std=c++17
+    - -DARDUINO=1
+    - -Wno-unknown-pragmas

@@ -1,0 +1,5 @@
+-xc++
+-std=c++17
+-DARDUINO=1
+-Wno-unknown-pragmas
+-IC:\Users\jedus\.platformio\packages\framework-arduinoespressif32\cores\esp32

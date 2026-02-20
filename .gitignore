@@ -1,0 +1,65 @@
+# Dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+expo-env.d.ts
+
+# Web build output
+web/build/
+
+# Native builds
+*.hprof
+*.apk
+*.aab
+*.ipa
+android/build/
+android/app/build/
+android/.gradle/
+ios/build/
+ios/Pods/
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.local
+
+# Logs and debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# PlatformIO (firmware)
+.pio/
+.piolibdeps/
+.vscode/.browse.c_cpp.db*
+.vscode/c_cpp_properties.json
+.vscode/launch.json
+.clangd/
+
+# Testing / Coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# Misc
+*.tsbuildinfo

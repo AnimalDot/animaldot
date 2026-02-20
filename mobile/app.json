@@ -1,0 +1,57 @@
+{
+  "name": "AnimalDot",
+  "displayName": "AnimalDot",
+  "expo": {
+    "name": "AnimalDot",
+    "slug": "animaldot",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#3A7BFF"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "edu.uga.animaldot",
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "AnimalDot needs Bluetooth to connect to your smart pet bed",
+        "NSBluetoothPeripheralUsageDescription": "AnimalDot needs Bluetooth to connect to your smart pet bed",
+        "UIBackgroundModes": ["bluetooth-central"]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#3A7BFF"
+      },
+      "package": "edu.uga.animaldot",
+      "permissions": [
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": true,
+          "modes": ["peripheral", "central"],
+          "bluetoothAlwaysPermission": "Allow $(PRODUCT_NAME) to connect to the AnimalDot smart bed"
+        }
+      ]
+    ]
+  }
+}
