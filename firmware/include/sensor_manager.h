@@ -1,8 +1,17 @@
 /**
- * AnimalDot Smart Bed - Sensor Manager
- * 
- * Manages all sensor interfaces including DHT22 (temp/humidity),
- * FX29 load cells (weight), and geophone (vital signs).
+ * @file sensor_manager.h
+ * @brief AnimalDot Smart Bed — Sensor Manager
+ *
+ * Coordinates all sensor interfaces:
+ *   - DHT22 (ambient temperature / humidity)
+ *   - FX29  load cells × 5 (weight via I2C)
+ *   - Geophone analog input (cardiac & respiratory vibrations)
+ *   - ADXL355 high-precision accelerometer (optional, SPI)
+ *
+ * Each sensor has an independent update cadence.  The manager
+ * exposes a single getData() snapshot consumed by BLE and MQTT.
+ *
+ * @version 2.0.0
  */
 
 #ifndef SENSOR_MANAGER_H
@@ -14,100 +23,123 @@
 #include "config.h"
 #include "signal_processor.h"
 
-// Sensor status flags
+/* ---- Data Structures ------------------------------------------------- */
+
+/**
+ * @brief Bitmask flags for each sensor subsystem.
+ */
 struct SensorStatus {
-    bool dhtConnected;
-    bool loadCellsConnected;
-    bool geophoneConnected;
-    uint8_t errorCode;
+    bool     dhtConnected;
+    bool     loadCellsConnected;
+    bool     geophoneConnected;
+    bool     adxl355Connected;       /**< Optional ADXL355 present        */
+    uint8_t  errorCode;              /**< Bitmask of ERR_* flags          */
     unsigned long lastUpdate;
 };
 
-// Environmental data
+/**
+ * @brief Ambient environment readings from DHT22.
+ */
 struct EnvironmentData {
-    float temperature;      // Celsius
-    float temperatureF;     // Fahrenheit
-    float humidity;         // Percentage
-    bool isValid;
+    float    temperature;            /**< Celsius                         */
+    float    temperatureF;           /**< Fahrenheit                      */
+    float    humidity;               /**< Relative %                      */
+    bool     isValid;
     unsigned long timestamp;
 };
 
-// Weight data
+/**
+ * @brief Aggregated weight from up to five FX29 load cells.
+ */
 struct WeightData {
-    float totalWeight;      // Pounds
-    float loadCell1;        // Individual cell readings
-    float loadCell2;
-    float loadCell3;
-    float loadCell4;
-    float loadCell5;
-    bool isValid;
-    bool isStable;
+    float    totalWeight;            /**< Pounds                          */
+    float    loadCell[5];            /**< Individual cell readings        */
+    bool     isValid;
+    bool     isStable;               /**< Low variance over recent window */
     unsigned long timestamp;
 };
 
-// Combined sensor data
+/**
+ * @brief Convenience bundle of every sensor reading.
+ */
 struct SensorData {
-    VitalSigns vitals;
+    VitalSigns      vitals;
     EnvironmentData environment;
-    WeightData weight;
-    SensorStatus status;
+    WeightData      weight;
+    SensorStatus    status;
 };
+
+/* ---- Class ----------------------------------------------------------- */
 
 class SensorManager {
 public:
     SensorManager();
-    
-    // Initialize all sensors
+
+    /**
+     * @brief Probe and initialise all connected sensors.
+     * @return true if every sensor passed; false if any flagged an error.
+     */
     bool begin();
-    
-    // Update functions (call in main loop)
-    void updateGeophone();      // Call at high frequency (200 Hz)
-    void updateEnvironment();   // Call every 2 seconds
-    void updateWeight();        // Call every 500ms
-    
-    // Get latest data
-    SensorData getData();
-    VitalSigns getVitalSigns();
+
+    /** @name Per-sensor update calls (different cadences)
+     *  Call these from the main loop at their respective intervals.
+     */
+    ///@{
+    void updateGeophone();           /**< Call at ≥ 200 Hz               */
+    void updateEnvironment();        /**< Call every ~2 s                 */
+    void updateWeight();             /**< Call every ~500 ms              */
+    ///@}
+
+    /** @name Data accessors (thread-safe snapshot) */
+    ///@{
+    SensorData      getData();
+    VitalSigns      getVitalSigns();
     EnvironmentData getEnvironment();
-    WeightData getWeight();
-    SensorStatus getStatus();
-    
-    // Calibration functions
-    void tareWeight();
-    void setWeightCalibrationFactor(float factor);
-    void setTemperatureOffset(float offset);
-    
-    // Raw data access (for debugging/streaming)
+    WeightData      getWeight();
+    SensorStatus    getStatus();
+    ///@}
+
+    /** @name Calibration */
+    ///@{
+    void  tareWeight();
+    void  setWeightCalibrationFactor(float factor);
+    void  setTemperatureOffset(float offset);
+    float getWeightCalibrationFactor() const { return _weightCalFactor; }
+    float getTemperatureOffset()       const { return _tempOffset; }
+    float getWeightTare()              const { return _weightTare; }
+    ///@}
+
+    /** @brief Raw 12-bit geophone sample centred around 0. */
     int16_t getRawGeophoneSample();
-    
+
 private:
-    // Sensors
-    DHT dht;
-    SignalProcessor signalProcessor;
-    
-    // Calibration values
-    float weightCalibrationFactor;
-    float temperatureOffset;
-    float weightTare;
-    
-    // Timing
-    unsigned long lastDhtUpdate;
-    unsigned long lastWeightUpdate;
-    unsigned long lastGeophoneUpdate;
-    
-    // Latest readings
-    EnvironmentData latestEnvironment;
-    WeightData latestWeight;
-    SensorStatus sensorStatus;
-    
-    // I2C helper functions for FX29 load cells
-    bool readFX29(uint8_t address, float& force);
-    bool initFX29(uint8_t address);
-    
-    // Stability detection for weight
-    float weightHistory[10];
-    uint8_t weightHistoryIndex;
-    bool checkWeightStability();
+    DHT              _dht;
+    SignalProcessor  _signalProcessor;
+
+    /* Calibration */
+    float _weightCalFactor;
+    float _tempOffset;
+    float _weightTare;
+
+    /* Timing guards */
+    unsigned long _lastDhtUpdate;
+    unsigned long _lastWeightUpdate;
+    unsigned long _lastGeophoneUpdate;
+
+    /* Cached readings */
+    EnvironmentData _latestEnv;
+    WeightData      _latestWeight;
+    SensorStatus    _sensorStatus;
+
+    /* Weight stability window */
+    static constexpr uint8_t WEIGHT_HISTORY_LEN = 10;
+    float   _weightHistory[WEIGHT_HISTORY_LEN];
+    uint8_t _weightHistIdx;
+    bool    _checkWeightStability();
+
+    /* FX29 I2C helpers */
+    bool _initFX29(uint8_t address);
+    bool _readFX29(uint8_t address, float& force);
 };
 
-#endif // SENSOR_MANAGER_H
+#endif /* SENSOR_MANAGER_H */
