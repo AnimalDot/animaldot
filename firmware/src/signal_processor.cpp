@@ -1,250 +1,229 @@
 /**
- * AnimalDot Smart Bed - Signal Processing Implementation
- * 
- * Digital signal processing for extracting heart rate and 
- * respiratory rate from geophone vibration data.
+ * @file signal_processor.cpp
+ * @brief AnimalDot Smart Bed — DSP Implementation
+ *
+ * Band-pass → peak-count → exponential-smooth pipeline for
+ * extracting HR and RR from geophone vibration data.
  */
 
 #include "signal_processor.h"
 #include <math.h>
 
-// Constructor
-SignalProcessor::SignalProcessor() 
-    : signalMean(0), signalStdDev(0), baselineNoise(10.0f),
-      prevHeartRate(80.0f), prevRespRate(20.0f) {
-    memset(hrFilteredBuffer, 0, sizeof(hrFilteredBuffer));
-    memset(rrFilteredBuffer, 0, sizeof(rrFilteredBuffer));
+/* ===================================================================== */
+/* Constructor / Reset                                                   */
+/* ===================================================================== */
+
+SignalProcessor::SignalProcessor()
+    : _signalMean(0.0f), _signalStdDev(0.0f),
+      _baselineNoise(10.0f),
+      _prevHR(80.0f), _prevRR(20.0f) {
+    memset(_hrFiltered, 0, sizeof(_hrFiltered));
+    memset(_rrFiltered, 0, sizeof(_rrFiltered));
 }
 
 void SignalProcessor::addSample(int16_t sample) {
-    sampleBuffer.push(sample);
+    _sampleBuf.push(sample);
 }
 
 void SignalProcessor::reset() {
-    sampleBuffer.clear();
-    prevHeartRate = 80.0f;
-    prevRespRate = 20.0f;
-    signalMean = 0;
-    signalStdDev = 0;
+    _sampleBuf.clear();
+    _prevHR       = 80.0f;
+    _prevRR       = 20.0f;
+    _signalMean   = 0.0f;
+    _signalStdDev = 0.0f;
 }
+
+/* ===================================================================== */
+/* Main processing entry point                                           */
+/* ===================================================================== */
 
 VitalSigns SignalProcessor::processSignals() {
     VitalSigns result;
-    result.isValid = false;
+    result.isValid   = false;
     result.timestamp = millis();
-    
-    // Need full buffer for processing
-    if (!sampleBuffer.isFull()) {
-        result.heartRate = prevHeartRate;
-        result.respiratoryRate = prevRespRate;
-        result.signalQuality = 0;
-        result.qualityLevel = QUALITY_POOR;
+
+    /* ---- Guard: need a full 2-second window ---- */
+    if (!_sampleBuf.isFull()) {
+        result.heartRate       = _prevHR;
+        result.respiratoryRate = _prevRR;
+        result.signalQuality   = 0.0f;
+        result.qualityLevel    = QUALITY_POOR;
         return result;
     }
-    
-    size_t length = sampleBuffer.size();
-    
-    // Convert samples to float and remove DC offset
+
+    const size_t N = _sampleBuf.size();
+
+    /* ---- Convert to float, compute DC offset ---- */
     float rawSignal[GEOPHONE_BUFFER_SIZE];
-    float sum = 0;
-    for (size_t i = 0; i < length; i++) {
-        rawSignal[i] = (float)sampleBuffer.get(i);
+    float sum = 0.0f;
+    for (size_t i = 0; i < N; i++) {
+        rawSignal[i] = static_cast<float>(_sampleBuf.get(i));
         sum += rawSignal[i];
     }
-    signalMean = sum / length;
-    
-    // Remove DC offset
-    for (size_t i = 0; i < length; i++) {
-        rawSignal[i] -= signalMean;
-    }
-    
-    // Calculate standard deviation
-    float sumSq = 0;
-    for (size_t i = 0; i < length; i++) {
-        sumSq += rawSignal[i] * rawSignal[i];
-    }
-    signalStdDev = sqrt(sumSq / length);
-    
-    // Check if signal is too weak
-    if (signalStdDev < baselineNoise * 1.5f) {
-        result.heartRate = prevHeartRate;
-        result.respiratoryRate = prevRespRate;
-        result.signalQuality = 0.1f;
-        result.qualityLevel = QUALITY_POOR;
+    _signalMean = sum / N;
+
+    /* Remove DC */
+    for (size_t i = 0; i < N; i++) rawSignal[i] -= _signalMean;
+
+    /* ---- Standard deviation (signal energy) ---- */
+    float sumSq = 0.0f;
+    for (size_t i = 0; i < N; i++) sumSq += rawSignal[i] * rawSignal[i];
+    _signalStdDev = sqrtf(sumSq / N);
+
+    /* ---- Reject weak signal (pet not on bed, etc.) ---- */
+    if (_signalStdDev < _baselineNoise * 1.5f) {
+        result.heartRate       = _prevHR;
+        result.respiratoryRate = _prevRR;
+        result.signalQuality   = 0.1f;
+        result.qualityLevel    = QUALITY_POOR;
         return result;
     }
-    
-    // Apply bandpass filter for heart rate (1-3 Hz = 60-180 bpm)
-    applyBandpassFilter(sampleBuffer.data(), hrFilteredBuffer, length, 
-                       HR_FREQ_MIN_HZ, HR_FREQ_MAX_HZ);
-    
-    // Apply bandpass filter for respiratory rate (0.1-1 Hz = 6-60 breaths/min)
-    applyBandpassFilter(sampleBuffer.data(), rrFilteredBuffer, length,
-                       RR_FREQ_MIN_HZ, RR_FREQ_MAX_HZ);
-    
-    // Detect heart rate using peak counting
-    float hrThreshold = calculateRMS(hrFilteredBuffer, length) * PEAK_THRESHOLD_FRACTION;
-    int hrPeaks = countPeaks(hrFilteredBuffer, length, hrThreshold);
-    
-    // Convert peaks to BPM (2 seconds of data)
-    float measuredHR = (hrPeaks / 2.0f) * 60.0f;
-    
-    // Detect respiratory rate
-    float rrThreshold = calculateRMS(rrFilteredBuffer, length) * PEAK_THRESHOLD_FRACTION;
-    int rrPeaks = countPeaks(rrFilteredBuffer, length, rrThreshold);
+
+    /* ---- Band-pass for HR (0.67–3 Hz = 40–180 bpm) ---- */
+    _applyBandpass(_sampleBuf.data(), _hrFiltered, N,
+                   HR_FREQ_MIN_HZ, HR_FREQ_MAX_HZ);
+
+    /* ---- Band-pass for RR (0.083–1 Hz = 5–60 brpm) ---- */
+    _applyBandpass(_sampleBuf.data(), _rrFiltered, N,
+                   RR_FREQ_MIN_HZ, RR_FREQ_MAX_HZ);
+
+    /* ---- Peak counting → BPM ---- */
+    float hrThr = _rms(_hrFiltered, N) * PEAK_THRESHOLD_FRACTION;
+    int   hrPeaks = _countPeaks(_hrFiltered, N, hrThr);
+    float measuredHR = (hrPeaks / 2.0f) * 60.0f;   /* 2-s window */
+
+    float rrThr = _rms(_rrFiltered, N) * PEAK_THRESHOLD_FRACTION;
+    int   rrPeaks = _countPeaks(_rrFiltered, N, rrThr);
     float measuredRR = (rrPeaks / 2.0f) * 60.0f;
-    
-    // Validate and constrain values
+
+    /* ---- Validate & exponential smooth ---- */
     if (measuredHR >= HR_MIN_BPM && measuredHR <= HR_MAX_BPM) {
-        // Apply exponential smoothing
-        result.heartRate = 0.7f * measuredHR + 0.3f * prevHeartRate;
-        prevHeartRate = result.heartRate;
+        result.heartRate = 0.7f * measuredHR + 0.3f * _prevHR;
+        _prevHR = result.heartRate;
     } else {
-        result.heartRate = prevHeartRate;
+        result.heartRate = _prevHR;
     }
-    
+
     if (measuredRR >= RR_MIN_BPM && measuredRR <= RR_MAX_BPM) {
-        result.respiratoryRate = 0.7f * measuredRR + 0.3f * prevRespRate;
-        prevRespRate = result.respiratoryRate;
+        result.respiratoryRate = 0.7f * measuredRR + 0.3f * _prevRR;
+        _prevRR = result.respiratoryRate;
     } else {
-        result.respiratoryRate = prevRespRate;
+        result.respiratoryRate = _prevRR;
     }
-    
-    // Calculate signal quality
-    result.signalQuality = calculateSignalQuality(hrFilteredBuffer, length);
-    
-    if (result.signalQuality >= SIGNAL_QUALITY_GOOD) {
-        result.qualityLevel = QUALITY_GOOD;
-    } else if (result.signalQuality >= SIGNAL_QUALITY_FAIR) {
-        result.qualityLevel = QUALITY_FAIR;
-    } else {
-        result.qualityLevel = QUALITY_POOR;
-    }
-    
+
+    /* ---- Signal quality ---- */
+    result.signalQuality = _calcSignalQuality(_hrFiltered, N);
+    result.qualityLevel  = (result.signalQuality >= SIGNAL_QUALITY_GOOD)
+                               ? QUALITY_GOOD
+                           : (result.signalQuality >= SIGNAL_QUALITY_FAIR)
+                               ? QUALITY_FAIR
+                               : QUALITY_POOR;
     result.isValid = (result.qualityLevel != QUALITY_POOR);
-    
+
     return result;
 }
 
-void SignalProcessor::applyBandpassFilter(const int16_t* input, float* output,
-                                         size_t length, float lowFreq, float highFreq) {
-    // Simple IIR bandpass filter implementation
-    // Convert frequency to normalized (0 to 0.5)
-    float fs = GEOPHONE_SAMPLE_RATE_HZ;
-    float lowNorm = lowFreq / (fs / 2.0f);
-    float highNorm = highFreq / (fs / 2.0f);
-    
-    // Clamp normalized frequencies
-    lowNorm = constrain(lowNorm, 0.001f, 0.499f);
-    highNorm = constrain(highNorm, 0.001f, 0.499f);
-    
-    // First-order high-pass filter coefficients
-    float alpha_hp = 1.0f / (1.0f + 2.0f * M_PI * lowNorm);
-    
-    // First-order low-pass filter coefficients  
-    float alpha_lp = 2.0f * M_PI * highNorm / (1.0f + 2.0f * M_PI * highNorm);
-    
-    // Apply high-pass filter
-    float hpPrev = 0;
-    float hpOut = 0;
-    for (size_t i = 0; i < length; i++) {
-        float x = (float)input[i];
-        hpOut = alpha_hp * (hpOut + x - hpPrev);
+/* ===================================================================== */
+/* DSP building blocks                                                   */
+/* ===================================================================== */
+
+/**
+ * @brief Simple cascaded HP + LP IIR acting as a band-pass.
+ *
+ * Uses first-order RC-style coefficients.  Good enough for the
+ * resolution we need; a proper Butterworth implementation is
+ * available via _butterworthBandpass() for future upgrades.
+ */
+void SignalProcessor::_applyBandpass(const int16_t* in, float* out,
+                                    size_t len, float loHz, float hiHz) {
+    const float fs      = static_cast<float>(GEOPHONE_SAMPLE_RATE_HZ);
+    float loNorm  = constrain(loHz / (fs / 2.0f), 0.001f, 0.499f);
+    float hiNorm  = constrain(hiHz / (fs / 2.0f), 0.001f, 0.499f);
+
+    float alphaHP = 1.0f / (1.0f + 2.0f * M_PI * loNorm);
+    float alphaLP = 2.0f * M_PI * hiNorm / (1.0f + 2.0f * M_PI * hiNorm);
+
+    /* High-pass */
+    float hpPrev = 0.0f, hpOut = 0.0f;
+    for (size_t i = 0; i < len; i++) {
+        float x = static_cast<float>(in[i]);
+        hpOut = alphaHP * (hpOut + x - hpPrev);
         hpPrev = x;
-        output[i] = hpOut;
+        out[i] = hpOut;
     }
-    
-    // Apply low-pass filter
-    float lpPrev = 0;
-    for (size_t i = 0; i < length; i++) {
-        lpPrev = lpPrev + alpha_lp * (output[i] - lpPrev);
-        output[i] = lpPrev;
+
+    /* Low-pass */
+    float lpPrev = 0.0f;
+    for (size_t i = 0; i < len; i++) {
+        lpPrev += alphaLP * (out[i] - lpPrev);
+        out[i] = lpPrev;
     }
 }
 
-int SignalProcessor::countPeaks(const float* signal, size_t length, float threshold) {
-    int peakCount = 0;
-    bool aboveThreshold = false;
-    size_t lastPeakIndex = 0;
-    size_t minPeakDistance = (GEOPHONE_SAMPLE_RATE_HZ * MIN_PEAK_INTERVAL_MS) / 1000;
-    
-    for (size_t i = 1; i < length - 1; i++) {
-        // Check if this is a local maximum above threshold
-        if (signal[i] > threshold && 
-            signal[i] > signal[i-1] && 
-            signal[i] > signal[i+1]) {
-            
-            // Check minimum distance from last peak
-            if (i - lastPeakIndex >= minPeakDistance || peakCount == 0) {
-                peakCount++;
-                lastPeakIndex = i;
+int SignalProcessor::_countPeaks(const float* sig, size_t len, float thr) {
+    int    peaks = 0;
+    size_t lastPk = 0;
+    const size_t minDist =
+        (GEOPHONE_SAMPLE_RATE_HZ * MIN_PEAK_INTERVAL_MS) / 1000;
+
+    for (size_t i = 1; i + 1 < len; i++) {
+        if (sig[i] > thr && sig[i] > sig[i - 1] && sig[i] > sig[i + 1]) {
+            if (peaks == 0 || (i - lastPk) >= minDist) {
+                peaks++;
+                lastPk = i;
             }
         }
     }
-    
-    return peakCount;
+    return peaks;
 }
 
-float SignalProcessor::calculateSignalQuality(const float* signal, size_t length) {
-    // Calculate signal-to-noise ratio as quality metric
-    float rms = calculateRMS(signal, length);
-    
-    // Higher RMS relative to baseline noise = better quality
-    float snr = rms / baselineNoise;
-    
-    // Normalize to 0-1 range
-    float quality = constrain(snr / 10.0f, 0.0f, 1.0f);
-    
-    return quality;
+float SignalProcessor::_calcSignalQuality(const float* sig, size_t len) {
+    float rmsVal = _rms(sig, len);
+    float snr    = rmsVal / _baselineNoise;
+    return constrain(snr / 10.0f, 0.0f, 1.0f);
 }
 
-float SignalProcessor::calculateMean(const float* data, size_t length) {
-    if (length == 0) return 0;
-    float sum = 0;
-    for (size_t i = 0; i < length; i++) {
-        sum += data[i];
+/* ===================================================================== */
+/* Statistical helpers                                                   */
+/* ===================================================================== */
+
+float SignalProcessor::_mean(const float* d, size_t n) {
+    if (n == 0) return 0.0f;
+    float s = 0.0f;
+    for (size_t i = 0; i < n; i++) s += d[i];
+    return s / n;
+}
+
+float SignalProcessor::_stddev(const float* d, size_t n, float m) {
+    if (n <= 1) return 0.0f;
+    float s = 0.0f;
+    for (size_t i = 0; i < n; i++) { float diff = d[i] - m; s += diff * diff; }
+    return sqrtf(s / (n - 1));
+}
+
+float SignalProcessor::_rms(const float* d, size_t n) {
+    if (n == 0) return 0.0f;
+    float s = 0.0f;
+    for (size_t i = 0; i < n; i++) s += d[i] * d[i];
+    return sqrtf(s / n);
+}
+
+void SignalProcessor::_butterworthBandpass(const float* in, float* out,
+                                          size_t len, float lo, float hi,
+                                          int order) {
+    /* Cascaded first-order passes as a quick approximation.
+       Replace with biquad SOS sections for production quality. */
+    float* tmp = new (std::nothrow) float[len];
+    if (!tmp) {
+        /* Heap exhausted — fall back to single-pass */
+        _applyBandpass(reinterpret_cast<const int16_t*>(in), out,
+                       len, lo, hi);
+        return;
     }
-    return sum / length;
-}
-
-float SignalProcessor::calculateStdDev(const float* data, size_t length, float mean) {
-    if (length <= 1) return 0;
-    float sumSq = 0;
-    for (size_t i = 0; i < length; i++) {
-        float diff = data[i] - mean;
-        sumSq += diff * diff;
-    }
-    return sqrt(sumSq / (length - 1));
-}
-
-float SignalProcessor::calculateRMS(const float* data, size_t length) {
-    if (length == 0) return 0;
-    float sumSq = 0;
-    for (size_t i = 0; i < length; i++) {
-        sumSq += data[i] * data[i];
-    }
-    return sqrt(sumSq / length);
-}
-
-void SignalProcessor::butterworthBandpass(const float* input, float* output, 
-                                         size_t length, float lowCutoff, 
-                                         float highCutoff, int order) {
-    // 2nd order Butterworth bandpass filter
-    // Pre-calculated coefficients for common frequency ranges
-    
-    float fs = GEOPHONE_SAMPLE_RATE_HZ;
-    float f1 = lowCutoff / fs;
-    float f2 = highCutoff / fs;
-    
-    // Simplified implementation using cascaded first-order filters
-    float* temp = new float[length];
-    memcpy(temp, input, length * sizeof(float));
-    
+    memcpy(tmp, in, len * sizeof(float));
     for (int o = 0; o < order; o++) {
-        applyBandpassFilter(reinterpret_cast<const int16_t*>(temp), output, 
-                           length, lowCutoff, highCutoff);
-        memcpy(temp, output, length * sizeof(float));
+        _applyBandpass(reinterpret_cast<const int16_t*>(tmp), out, len, lo, hi);
+        memcpy(tmp, out, len * sizeof(float));
     }
-    
-    delete[] temp;
+    delete[] tmp;
 }
