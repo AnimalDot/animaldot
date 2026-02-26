@@ -1,190 +1,271 @@
 /**
- * AnimalDot Smart Bed - Main Firmware
- * 
- * ESP32 firmware for passive vital sign monitoring of pets.
- * Integrates geophone (HR/RR), DHT22 (temp/humidity), and 
- * FX29 load cells (weight) with BLE data streaming.
- * 
- * University of Georgia - Capstone Design Project
+ * @file main.cpp
+ * @brief AnimalDot Smart Bed — Main Firmware Entry Point
+ *
+ * Startup sequence:
+ *   1. Load persistent settings from NVS.
+ *   2. Initialise sensors (DHT22, FX29 load cells, geophone).
+ *   3. Initialise BLE and begin advertising.
+ *   4. Connect to WiFi (STA with captive-portal fallback).
+ *   5. Connect to MQTT broker and begin publishing.
+ *   6. Enter the main super-loop:
+ *        a. High-priority geophone sampling (200 Hz).
+ *        b. Periodic sensor reads (DHT, weight).
+ *        c. BLE notifications  (1 s cadence).
+ *        d. MQTT publishing    (5 s cadence).
+ *        e. Calibration command handling.
+ *        f. WiFi / MQTT health monitoring.
+ *        g. Heartbeat LED + serial diagnostics.
+ *
+ * University of Georgia — Capstone Design 2025
  * Team: Bryce, Caleb, Colby, Grant, Jalen, Naman
  * Advisors: Dr. Peter Kner, Dr. Jorge Rodriguez
  * Sponsors: Dr. Ben Brainard, Dr. Wenzhan Song
+ *
+ * @version 2.0.0
  */
 
 #include <Arduino.h>
 #include "config.h"
+#include "settings_manager.h"
 #include "sensor_manager.h"
 #include "ble_manager.h"
+#include "wifi_manager.h"
+#include "mqtt_manager.h"
 
-// Global objects
-SensorManager sensorManager;
-BLEManager bleManager;
+/* ---- Global instances ------------------------------------------------ */
 
-// Timing variables
-unsigned long lastBLENotify = 0;
-unsigned long lastStatusPrint = 0;
-unsigned long lastLedToggle = 0;
-bool ledState = false;
+static SettingsManager settings;
+static SensorManager   sensors;
+static BLEManager      ble;
+static WifiManager     wifi;
+static MqttManager     mqtt;
 
-// Connection callback class
-class MyConnectionCallbacks : public BLEConnectionCallbacks {
+/* ---- Timing variables ------------------------------------------------ */
+
+static unsigned long lastBLENotify   = 0;
+static unsigned long lastMqttPublish = 0;
+static unsigned long lastStatusPrint = 0;
+static unsigned long lastLedToggle   = 0;
+static bool          ledState        = false;
+
+/* ---- BLE connection callback ----------------------------------------- */
+
+class ConnectionCallbacks : public BLEConnectionCallbacks {
 public:
-    void onConnect() override {
-        Serial.println("[Main] BLE client connected!");
-        // Fast LED blink when connected
-    }
-    
-    void onDisconnect() override {
-        Serial.println("[Main] BLE client disconnected");
-    }
+    void onConnect()    override { Serial.println("[Main] BLE client connected");  }
+    void onDisconnect() override { Serial.println("[Main] BLE client disconnected"); }
 };
+static ConnectionCallbacks bleCallbacks;
 
-MyConnectionCallbacks connectionCallbacks;
+/* ---- WiFi mode-change callback --------------------------------------- */
+
+static void onWifiModeChange(WifiMode mode) {
+    switch (mode) {
+        case WifiMode::STATION:
+            Serial.printf("[Main] WiFi → STATION (%s)\n",
+                          WiFi.localIP().toString().c_str());
+            /* Start MQTT now that we have connectivity */
+            mqtt.begin(settings.mqttHost(), settings.mqttPort(),
+                       settings.orgName(), wifi.macAddressRaw());
+            break;
+        case WifiMode::ACCESS_POINT:
+            Serial.println("[Main] WiFi → AP (captive portal active)");
+            break;
+        case WifiMode::CONNECTING:
+            Serial.println("[Main] WiFi → CONNECTING…");
+            break;
+        case WifiMode::DISCONNECTED:
+            Serial.println("[Main] WiFi → DISCONNECTED");
+            break;
+    }
+}
+
+/* ===================================================================== */
+/* setup()                                                               */
+/* ===================================================================== */
 
 void setup() {
-    // Initialize serial for debugging
     Serial.begin(115200);
     delay(1000);
-    
+
     Serial.println();
-    Serial.println("========================================");
-    Serial.println("  AnimalDot Smart Bed - Starting Up");
-    Serial.printf("  Firmware Version: %s\n", FIRMWARE_VERSION);
-    Serial.println("========================================");
+    Serial.println("================================================");
+    Serial.println("  AnimalDot Smart Bed — Starting Up");
+    Serial.printf("  Firmware v%s\n", FIRMWARE_VERSION);
+    Serial.println("================================================");
     Serial.println();
-    
-    // Initialize status LED
+
     pinMode(LED_PIN, OUTPUT);
-    digitalWrite(LED_PIN, HIGH);  // LED on during init
-    
-    // Initialize sensor manager
-    Serial.println("[Main] Initializing sensors...");
-    if (!sensorManager.begin()) {
-        Serial.println("[Main] Warning: Some sensors failed to initialize");
+    digitalWrite(LED_PIN, HIGH);  /* LED on during init */
+
+    /* ---- 1. Persistent settings ---- */
+    Serial.println("[Main] Loading settings…");
+    if (!settings.begin()) {
+        Serial.println("[Main] WARNING — NVS init failed; using defaults");
     }
-    
-    // Initialize BLE manager
-    Serial.println("[Main] Initializing BLE...");
-    if (!bleManager.begin()) {
-        Serial.println("[Main] Error: BLE initialization failed!");
-        // Continue anyway - sensors still work
+
+    /* ---- 2. Sensors ---- */
+    Serial.println("[Main] Initialising sensors…");
+    if (!sensors.begin()) {
+        Serial.println("[Main] WARNING — some sensors failed");
     }
-    
-    // Set BLE connection callback
-    bleManager.setConnectionCallback(&connectionCallbacks);
-    
-    // Initial weight tare (bed should be empty at startup)
-    Serial.println("[Main] Performing initial weight tare...");
-    delay(1000);
-    sensorManager.tareWeight();
-    
-    digitalWrite(LED_PIN, LOW);  // LED off, init complete
-    
+    /* Apply stored calibration */
+    sensors.setWeightCalibrationFactor(settings.weightCal());
+    sensors.setTemperatureOffset(settings.tempOffset());
+
+    /* ---- 3. BLE ---- */
+    Serial.println("[Main] Initialising BLE…");
+    if (!ble.begin()) {
+        Serial.println("[Main] ERROR — BLE init failed");
+    }
+    ble.setConnectionCallback(&bleCallbacks);
+
+    /* ---- 4. WiFi ---- */
+    Serial.println("[Main] Initialising WiFi…");
+    wifi.onModeChange(onWifiModeChange);
+    bool staOk = wifi.begin(settings.wifiSSID(), settings.wifiPass());
+
+    /* ---- 5. MQTT (only if STA connected) ---- */
+    if (staOk) {
+        Serial.println("[Main] Initialising MQTT…");
+        mqtt.begin(settings.mqttHost(), settings.mqttPort(),
+                   settings.orgName(), wifi.macAddressRaw());
+    }
+
+    /* ---- 6. Initial tare (bed should be empty at power-on) ---- */
+    Serial.println("[Main] Taring weight…");
+    delay(500);
+    sensors.tareWeight();
+
+    digitalWrite(LED_PIN, LOW);  /* LED off — init complete */
+
     Serial.println();
-    Serial.println("[Main] Initialization complete!");
-    Serial.println("[Main] Waiting for connections...");
+    Serial.println("[Main] Initialisation complete — entering main loop");
     Serial.println();
 }
 
+/* ===================================================================== */
+/* loop()                                                                */
+/* ===================================================================== */
+
 void loop() {
-    unsigned long currentTime = millis();
-    
-    // =========================================
-    // HIGH PRIORITY: Geophone sampling (200 Hz)
-    // =========================================
-    sensorManager.updateGeophone();
-    
-    // =========================================
-    // MEDIUM PRIORITY: Environmental sensors
-    // =========================================
-    sensorManager.updateEnvironment();
-    
-    // =========================================
-    // MEDIUM PRIORITY: Weight sensors
-    // =========================================
-    sensorManager.updateWeight();
-    
-    // =========================================
-    // BLE NOTIFICATIONS (every 1 second)
-    // =========================================
-    if (currentTime - lastBLENotify >= BLE_NOTIFY_INTERVAL_MS) {
-        lastBLENotify = currentTime;
-        
-        // Get all sensor data
-        SensorData data = sensorManager.getData();
-        
-        // Send to connected BLE clients
-        bleManager.updateVitals(data.vitals);
-        bleManager.updateEnvironment(data.environment);
-        bleManager.updateWeight(data.weight);
-        bleManager.updateStatus(data.status);
+    const unsigned long now = millis();
+
+    /* =========================================================
+     * HIGH PRIORITY — Geophone sampling at ≥ 200 Hz
+     * ========================================================= */
+    sensors.updateGeophone();
+
+    /* =========================================================
+     * MEDIUM PRIORITY — Peripheral sensors
+     * ========================================================= */
+    sensors.updateEnvironment();
+    sensors.updateWeight();
+
+    /* =========================================================
+     * WiFi service (captive portal / reconnect)
+     * ========================================================= */
+    wifi.loop();
+
+    /* =========================================================
+     * MQTT keep-alive / reconnect
+     * ========================================================= */
+    if (wifi.isConnected()) {
+        mqtt.loop();
     }
-    
-    // =========================================
-    // CALIBRATION COMMAND HANDLING
-    // =========================================
-    if (bleManager.hasCalibrationCommand()) {
-        CalibrationCommand cmd = bleManager.getCalibrationCommand();
-        
+
+    /* =========================================================
+     * BLE notifications (1 s cadence)
+     * ========================================================= */
+    if (now - lastBLENotify >= BLE_NOTIFY_INTERVAL_MS) {
+        lastBLENotify = now;
+        SensorData data = sensors.getData();
+        ble.updateVitals(data.vitals);
+        ble.updateEnvironment(data.environment);
+        ble.updateWeight(data.weight);
+        ble.updateStatus(data.status);
+    }
+
+    /* =========================================================
+     * MQTT publishing (5 s cadence)
+     * ========================================================= */
+    if (wifi.isConnected() && mqtt.isConnected() &&
+        (now - lastMqttPublish >= MQTT_PUBLISH_INTERVAL_MS)) {
+        lastMqttPublish = now;
+        SensorData data = sensors.getData();
+        mqtt.publishVitals(data.vitals);
+        mqtt.publishEnvironment(data.environment);
+        mqtt.publishWeight(data.weight);
+    }
+
+    /* =========================================================
+     * Calibration command handling (BLE)
+     * ========================================================= */
+    if (ble.hasCalibrationCommand()) {
+        CalibrationCommand cmd = ble.getCalibrationCommand();
         switch (cmd.commandType) {
-            case 0x01:  // Tare weight
-                Serial.println("[Main] Executing tare command");
-                sensorManager.tareWeight();
+            case 0x01:
+                Serial.println("[Main] CAL: tare weight");
+                sensors.tareWeight();
+                settings.setWeightTare(sensors.getWeightTare());
+                settings.save();
                 break;
-                
-            case 0x02:  // Temperature offset
-                Serial.printf("[Main] Setting temperature offset to %.2f\n", cmd.value);
-                sensorManager.setTemperatureOffset(cmd.value);
+            case 0x02:
+                Serial.printf("[Main] CAL: temp offset → %.2f\n", cmd.value);
+                sensors.setTemperatureOffset(cmd.value);
+                settings.setTempOffset(cmd.value);
+                settings.save();
                 break;
-                
-            case 0x03:  // Weight calibration factor
-                Serial.printf("[Main] Setting weight calibration factor to %.2f\n", cmd.value);
-                sensorManager.setWeightCalibrationFactor(cmd.value);
+            case 0x03:
+                Serial.printf("[Main] CAL: weight factor → %.2f\n", cmd.value);
+                sensors.setWeightCalibrationFactor(cmd.value);
+                settings.setWeightCal(cmd.value);
+                settings.save();
                 break;
-                
             default:
-                Serial.printf("[Main] Unknown calibration command: %d\n", cmd.commandType);
+                Serial.printf("[Main] CAL: unknown 0x%02X\n", cmd.commandType);
         }
     }
-    
-    // =========================================
-    // STATUS LED (heartbeat)
-    // =========================================
-    unsigned long ledInterval = bleManager.isConnected() ? 500 : 2000;
-    if (currentTime - lastLedToggle >= ledInterval) {
-        lastLedToggle = currentTime;
+
+    /* =========================================================
+     * Status LED heartbeat
+     * ========================================================= */
+    unsigned long ledInterval = ble.isConnected() ? 500 : 2000;
+    if (now - lastLedToggle >= ledInterval) {
+        lastLedToggle = now;
         ledState = !ledState;
         digitalWrite(LED_PIN, ledState);
     }
-    
-    // =========================================
-    // DEBUG OUTPUT (every 5 seconds)
-    // =========================================
-    if (currentTime - lastStatusPrint >= 5000) {
-        lastStatusPrint = currentTime;
-        
-        SensorData data = sensorManager.getData();
-        
-        Serial.println("--- AnimalDot Status ---");
-        Serial.printf("BLE Clients: %d\n", bleManager.getConnectionCount());
-        Serial.printf("Heart Rate: %.0f bpm (quality: %.0f%%)\n", 
-                     data.vitals.heartRate, data.vitals.signalQuality * 100);
-        Serial.printf("Resp Rate: %.0f breaths/min\n", data.vitals.respiratoryRate);
-        Serial.printf("Temperature: %.1f°F (%.1f°C)\n", 
-                     data.environment.temperatureF, data.environment.temperature);
-        Serial.printf("Humidity: %.1f%%\n", data.environment.humidity);
-        Serial.printf("Weight: %.1f lbs (stable: %s)\n", 
-                     data.weight.totalWeight, 
-                     data.weight.isStable ? "yes" : "no");
-        Serial.printf("Sensors: DHT=%s, LoadCell=%s, Geo=%s\n",
-                     data.status.dhtConnected ? "OK" : "FAIL",
-                     data.status.loadCellsConnected ? "OK" : "FAIL",
-                     data.status.geophoneConnected ? "OK" : "FAIL");
-        Serial.println("------------------------");
+
+    /* =========================================================
+     * Serial diagnostics (5 s cadence)
+     * ========================================================= */
+    if (now - lastStatusPrint >= STATUS_PRINT_INTERVAL_MS) {
+        lastStatusPrint = now;
+        SensorData d = sensors.getData();
+
+        Serial.println("──── AnimalDot Status ────");
+        Serial.printf("BLE clients : %u\n",  ble.getConnectionCount());
+        Serial.printf("WiFi        : %s\n",  wifi.isConnected() ? wifi.localIP().toString().c_str() : "disconnected");
+        Serial.printf("MQTT        : %s\n",  mqtt.isConnected() ? "connected" : "disconnected");
+        Serial.printf("Heart Rate  : %.0f bpm  (quality %.0f%%)\n",
+                      d.vitals.heartRate, d.vitals.signalQuality * 100);
+        Serial.printf("Resp Rate   : %.0f brpm\n", d.vitals.respiratoryRate);
+        Serial.printf("Temperature : %.1f °F (%.1f °C)\n",
+                      d.environment.temperatureF, d.environment.temperature);
+        Serial.printf("Humidity    : %.1f%%\n", d.environment.humidity);
+        Serial.printf("Weight      : %.1f lbs  (stable: %s)\n",
+                      d.weight.totalWeight,
+                      d.weight.isStable ? "yes" : "no");
+        Serial.printf("Sensors     : DHT=%s  LC=%s  Geo=%s\n",
+                      d.status.dhtConnected       ? "OK" : "FAIL",
+                      d.status.loadCellsConnected ? "OK" : "FAIL",
+                      d.status.geophoneConnected  ? "OK" : "FAIL");
+        Serial.println("──────────────────────────");
         Serial.println();
     }
-    
-    // Small delay to prevent watchdog issues
-    // The ESP32 needs some idle time
+
+    /* Brief yield to prevent watchdog reset */
     delayMicroseconds(100);
 }
