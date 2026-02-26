@@ -1,266 +1,224 @@
 /**
- * AnimalDot Smart Bed - BLE Manager Implementation
- * 
- * Implements Bluetooth Low Energy communication using NimBLE.
+ * @file ble_manager.cpp
+ * @brief AnimalDot Smart Bed — BLE Manager Implementation
+ *
+ * Creates two GATT services:
+ *   1. Custom AnimalDot service — HR, RR, temp, humidity, weight,
+ *      device status, calibration write, raw geophone stream.
+ *   2. Standard Heart Rate Service 0x180D — for third-party HR apps.
+ *
+ * Uses NimBLE to support multiple concurrent connections.
  */
 
 #include "ble_manager.h"
 
-BLEManager::BLEManager() 
-    : pServer(nullptr),
-      pAnimalDotService(nullptr),
-      pHeartRateService(nullptr),
-      connectedClients(0),
-      connectionCallback(nullptr),
-      hasPendingCommand(false) {
-    memset(&pendingCommand, 0, sizeof(pendingCommand));
+/* ===================================================================== */
+/* Constructor                                                           */
+/* ===================================================================== */
+
+BLEManager::BLEManager()
+    : _pServer(nullptr),
+      _pAnimalDotSvc(nullptr),
+      _pHeartRateSvc(nullptr),
+      _connectedClients(0),
+      _connectionCb(nullptr),
+      _hasPendingCmd(false) {
+    memset(&_pendingCmd, 0, sizeof(_pendingCmd));
 }
 
+/* ===================================================================== */
+/* Initialisation                                                        */
+/* ===================================================================== */
+
 bool BLEManager::begin() {
-    Serial.println("[BLEManager] Initializing BLE...");
-    
-    // Initialize NimBLE
+    Serial.println("[BLE] Initialising NimBLE…");
+
     NimBLEDevice::init(DEVICE_NAME);
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9);  // Max power for range
-    NimBLEDevice::setSecurityAuth(false, false, false);  // No security for simplicity
-    
-    // Create server
-    pServer = NimBLEDevice::createServer();
-    pServer->setCallbacks(this);
-    
-    // Create services and characteristics
-    createServices();
-    
-    // Start advertising
-    startAdvertising();
-    
-    Serial.println("[BLEManager] BLE initialized and advertising");
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9);               /* Max range   */
+    NimBLEDevice::setSecurityAuth(false, false, false);    /* Open pairing*/
+
+    _pServer = NimBLEDevice::createServer();
+    if (!_pServer) {
+        Serial.println("[BLE] ERROR — server creation failed");
+        return false;
+    }
+    _pServer->setCallbacks(this);
+
+    _createServices();
+    _startAdvertising();
+
+    Serial.println("[BLE] Ready and advertising");
     return true;
 }
 
-void BLEManager::createServices() {
-    // Create AnimalDot custom service
-    pAnimalDotService = pServer->createService(ANIMALDOT_SERVICE_UUID);
-    
-    // Heart Rate characteristic
-    pHeartRateChar = pAnimalDotService->createCharacteristic(
-        HEART_RATE_CHAR_UUID,
-        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
-    );
-    pHeartRateChar->setValue((uint8_t)0);
-    
-    // Respiratory Rate characteristic
-    pRespRateChar = pAnimalDotService->createCharacteristic(
-        RESP_RATE_CHAR_UUID,
-        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
-    );
-    pRespRateChar->setValue((uint8_t)0);
-    
-    // Temperature characteristic (as float, 4 bytes)
-    pTemperatureChar = pAnimalDotService->createCharacteristic(
-        TEMPERATURE_CHAR_UUID,
-        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
-    );
-    float initTemp = 0.0f;
-    pTemperatureChar->setValue((uint8_t*)&initTemp, 4);
-    
-    // Humidity characteristic (as float, 4 bytes)
-    pHumidityChar = pAnimalDotService->createCharacteristic(
-        HUMIDITY_CHAR_UUID,
-        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
-    );
-    float initHum = 0.0f;
-    pHumidityChar->setValue((uint8_t*)&initHum, 4);
-    
-    // Weight characteristic (as float, 4 bytes)
-    pWeightChar = pAnimalDotService->createCharacteristic(
-        WEIGHT_CHAR_UUID,
-        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
-    );
-    float initWeight = 0.0f;
-    pWeightChar->setValue((uint8_t*)&initWeight, 4);
-    
-    // Device Status characteristic (8 bytes)
-    // Byte 0: errorCode
-    // Byte 1: bit flags (dht, loadcell, geophone connected)
-    // Byte 2-3: reserved
-    // Byte 4-7: timestamp (uint32_t)
-    pStatusChar = pAnimalDotService->createCharacteristic(
-        DEVICE_STATUS_CHAR_UUID,
-        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
-    );
-    uint8_t initStatus[8] = {0};
-    pStatusChar->setValue(initStatus, 8);
-    
-    // Calibration characteristic (writable)
-    pCalibrationChar = pAnimalDotService->createCharacteristic(
-        CALIBRATION_CHAR_UUID,
-        NIMBLE_PROPERTY::WRITE
-    );
-    pCalibrationChar->setCallbacks(this);
-    
-    // Raw geophone characteristic (for debugging/streaming)
-    pRawGeophoneChar = pAnimalDotService->createCharacteristic(
-        RAW_GEOPHONE_CHAR_UUID,
-        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
-    );
-    int16_t initRaw = 0;
-    pRawGeophoneChar->setValue((uint8_t*)&initRaw, 2);
-    
-    // Start AnimalDot service
-    pAnimalDotService->start();
-    
-    // Create standard Heart Rate Service for compatibility
-    pHeartRateService = pServer->createService(HEART_RATE_SERVICE_UUID);
-    
-    pStandardHRChar = pHeartRateService->createCharacteristic(
-        HEART_RATE_MEASUREMENT_UUID,
-        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
-    );
-    uint8_t initHR[2] = {0x00, 0};  // Flags + HR value
-    pStandardHRChar->setValue(initHR, 2);
-    
-    pHeartRateService->start();
+/* ===================================================================== */
+/* Service & Characteristic creation                                     */
+/* ===================================================================== */
+
+void BLEManager::_createServices() {
+    /* ---- Custom AnimalDot Service ---- */
+    _pAnimalDotSvc = _pServer->createService(ANIMALDOT_SERVICE_UUID);
+
+    _pHRChar = _pAnimalDotSvc->createCharacteristic(
+        HEART_RATE_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+    _pHRChar->setValue(static_cast<uint8_t>(0));
+
+    _pRRChar = _pAnimalDotSvc->createCharacteristic(
+        RESP_RATE_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+    _pRRChar->setValue(static_cast<uint8_t>(0));
+
+    float zero = 0.0f;
+    _pTempChar = _pAnimalDotSvc->createCharacteristic(
+        TEMPERATURE_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+    _pTempChar->setValue(reinterpret_cast<uint8_t*>(&zero), 4);
+
+    _pHumChar = _pAnimalDotSvc->createCharacteristic(
+        HUMIDITY_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+    _pHumChar->setValue(reinterpret_cast<uint8_t*>(&zero), 4);
+
+    _pWeightChar = _pAnimalDotSvc->createCharacteristic(
+        WEIGHT_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+    _pWeightChar->setValue(reinterpret_cast<uint8_t*>(&zero), 4);
+
+    uint8_t statusInit[8] = {0};
+    _pStatusChar = _pAnimalDotSvc->createCharacteristic(
+        DEVICE_STATUS_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+    _pStatusChar->setValue(statusInit, 8);
+
+    _pCalChar = _pAnimalDotSvc->createCharacteristic(
+        CALIBRATION_CHAR_UUID, NIMBLE_PROPERTY::WRITE);
+    _pCalChar->setCallbacks(this);
+
+    int16_t rawZero = 0;
+    _pRawGeoChar = _pAnimalDotSvc->createCharacteristic(
+        RAW_GEOPHONE_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+    _pRawGeoChar->setValue(reinterpret_cast<uint8_t*>(&rawZero), 2);
+
+    _pAnimalDotSvc->start();
+
+    /* ---- Standard Heart Rate Service (BLE SIG 0x180D) ---- */
+    _pHeartRateSvc = _pServer->createService(HEART_RATE_SERVICE_UUID);
+    _pStdHRChar = _pHeartRateSvc->createCharacteristic(
+        HEART_RATE_MEASUREMENT_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+    uint8_t hrInit[2] = {0x00, 0};
+    _pStdHRChar->setValue(hrInit, 2);
+    _pHeartRateSvc->start();
 }
 
-void BLEManager::startAdvertising() {
-    NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
-    
-    // Add service UUIDs to advertising
-    pAdvertising->addServiceUUID(ANIMALDOT_SERVICE_UUID);
-    pAdvertising->addServiceUUID(HEART_RATE_SERVICE_UUID);
-    
-    // Set advertising parameters
-    pAdvertising->setScanResponse(true);
-    pAdvertising->setMinPreferred(0x06);  // 7.5ms connection interval
-    pAdvertising->setMaxPreferred(0x12);  // 22.5ms connection interval
-    
-    // Start advertising
+void BLEManager::_startAdvertising() {
+    NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+    adv->addServiceUUID(ANIMALDOT_SERVICE_UUID);
+    adv->addServiceUUID(HEART_RATE_SERVICE_UUID);
+    adv->setScanResponse(true);
+    adv->setMinPreferred(0x06);   /* 7.5 ms */
+    adv->setMaxPreferred(0x12);   /* 22.5 ms */
     NimBLEDevice::startAdvertising();
-    
-    Serial.println("[BLEManager] Advertising started");
+    Serial.println("[BLE] Advertising started");
 }
 
-void BLEManager::updateVitals(const VitalSigns& vitals) {
-    if (connectedClients == 0) return;
-    
-    // Update heart rate
-    uint8_t hr = (uint8_t)constrain(vitals.heartRate, 0, 255);
-    pHeartRateChar->setValue(&hr, 1);
-    pHeartRateChar->notify();
-    
-    // Update standard HR service
-    uint8_t hrPayload[2] = {0x00, hr};  // Flags: 8-bit HR, no other fields
-    pStandardHRChar->setValue(hrPayload, 2);
-    pStandardHRChar->notify();
-    
-    // Update respiratory rate
-    uint8_t rr = (uint8_t)constrain(vitals.respiratoryRate, 0, 255);
-    pRespRateChar->setValue(&rr, 1);
-    pRespRateChar->notify();
+/* ===================================================================== */
+/* Data notification helpers                                             */
+/* ===================================================================== */
+
+void BLEManager::updateVitals(const VitalSigns& v) {
+    if (_connectedClients == 0) return;
+
+    uint8_t hr = static_cast<uint8_t>(constrain(v.heartRate, 0, 255));
+    _pHRChar->setValue(&hr, 1);
+    _pHRChar->notify();
+
+    uint8_t hrPayload[2] = {0x00, hr};
+    _pStdHRChar->setValue(hrPayload, 2);
+    _pStdHRChar->notify();
+
+    uint8_t rr = static_cast<uint8_t>(constrain(v.respiratoryRate, 0, 255));
+    _pRRChar->setValue(&rr, 1);
+    _pRRChar->notify();
 }
 
 void BLEManager::updateEnvironment(const EnvironmentData& env) {
-    if (connectedClients == 0) return;
-    
-    // Update temperature (Fahrenheit)
-    pTemperatureChar->setValue((uint8_t*)&env.temperatureF, 4);
-    pTemperatureChar->notify();
-    
-    // Update humidity
-    pHumidityChar->setValue((uint8_t*)&env.humidity, 4);
-    pHumidityChar->notify();
+    if (_connectedClients == 0) return;
+    _pTempChar->setValue(reinterpret_cast<const uint8_t*>(&env.temperatureF), 4);
+    _pTempChar->notify();
+    _pHumChar->setValue(reinterpret_cast<const uint8_t*>(&env.humidity), 4);
+    _pHumChar->notify();
 }
 
-void BLEManager::updateWeight(const WeightData& weight) {
-    if (connectedClients == 0) return;
-    
-    // Send weight in pounds
-    pWeightChar->setValue((uint8_t*)&weight.totalWeight, 4);
-    pWeightChar->notify();
+void BLEManager::updateWeight(const WeightData& w) {
+    if (_connectedClients == 0) return;
+    _pWeightChar->setValue(reinterpret_cast<const uint8_t*>(&w.totalWeight), 4);
+    _pWeightChar->notify();
 }
 
-void BLEManager::updateStatus(const SensorStatus& status) {
-    if (connectedClients == 0) return;
-    
-    uint8_t statusData[8];
-    statusData[0] = status.errorCode;
-    statusData[1] = (status.dhtConnected ? 0x01 : 0) |
-                    (status.loadCellsConnected ? 0x02 : 0) |
-                    (status.geophoneConnected ? 0x04 : 0);
-    statusData[2] = 0;  // Reserved
-    statusData[3] = 0;  // Reserved
-    
-    // Timestamp as uint32_t
-    uint32_t ts = status.lastUpdate;
-    memcpy(&statusData[4], &ts, 4);
-    
-    pStatusChar->setValue(statusData, 8);
-    pStatusChar->notify();
+void BLEManager::updateStatus(const SensorStatus& s) {
+    if (_connectedClients == 0) return;
+
+    uint8_t buf[8];
+    buf[0] = s.errorCode;
+    buf[1] = (s.dhtConnected       ? 0x01 : 0)
+           | (s.loadCellsConnected ? 0x02 : 0)
+           | (s.geophoneConnected  ? 0x04 : 0)
+           | (s.adxl355Connected   ? 0x08 : 0);
+    buf[2] = 0;
+    buf[3] = 0;
+    uint32_t ts = static_cast<uint32_t>(s.lastUpdate);
+    memcpy(buf + 4, &ts, 4);
+
+    _pStatusChar->setValue(buf, 8);
+    _pStatusChar->notify();
 }
 
 void BLEManager::streamRawGeophone(int16_t sample) {
-    if (connectedClients == 0) return;
-    
-    pRawGeophoneChar->setValue((uint8_t*)&sample, 2);
-    pRawGeophoneChar->notify();
+    if (_connectedClients == 0) return;
+    _pRawGeoChar->setValue(reinterpret_cast<uint8_t*>(&sample), 2);
+    _pRawGeoChar->notify();
 }
 
-bool BLEManager::isConnected() {
-    return connectedClients > 0;
-}
+/* ===================================================================== */
+/* Connection state                                                      */
+/* ===================================================================== */
 
-uint32_t BLEManager::getConnectionCount() {
-    return connectedClients;
-}
+bool     BLEManager::isConnected()      { return _connectedClients > 0; }
+uint32_t BLEManager::getConnectionCount() { return _connectedClients; }
+void     BLEManager::setConnectionCallback(BLEConnectionCallbacks* cb) { _connectionCb = cb; }
 
-void BLEManager::setConnectionCallback(BLEConnectionCallbacks* callback) {
-    connectionCallback = callback;
-}
-
-bool BLEManager::hasCalibrationCommand() {
-    return hasPendingCommand;
-}
+bool BLEManager::hasCalibrationCommand() { return _hasPendingCmd; }
 
 CalibrationCommand BLEManager::getCalibrationCommand() {
-    hasPendingCommand = false;
-    return pendingCommand;
+    _hasPendingCmd = false;
+    return _pendingCmd;
 }
 
-// NimBLE Server Callbacks
-void BLEManager::onConnect(NimBLEServer* pServer) {
-    connectedClients++;
-    Serial.printf("[BLEManager] Client connected. Total: %d\n", connectedClients);
-    
-    // Continue advertising to allow multiple connections
-    NimBLEDevice::startAdvertising();
-    
-    if (connectionCallback) {
-        connectionCallback->onConnect();
-    }
+/* ===================================================================== */
+/* NimBLE Callbacks                                                      */
+/* ===================================================================== */
+
+void BLEManager::onConnect(NimBLEServer* /*s*/) {
+    _connectedClients++;
+    Serial.printf("[BLE] Client connected (total %u)\n", _connectedClients);
+    NimBLEDevice::startAdvertising();   /* Allow more connections */
+    if (_connectionCb) _connectionCb->onConnect();
 }
 
-void BLEManager::onDisconnect(NimBLEServer* pServer) {
-    if (connectedClients > 0) connectedClients--;
-    Serial.printf("[BLEManager] Client disconnected. Total: %d\n", connectedClients);
-    
-    if (connectionCallback) {
-        connectionCallback->onDisconnect();
-    }
+void BLEManager::onDisconnect(NimBLEServer* /*s*/) {
+    if (_connectedClients > 0) _connectedClients--;
+    Serial.printf("[BLE] Client disconnected (total %u)\n", _connectedClients);
+    if (_connectionCb) _connectionCb->onDisconnect();
 }
 
-// Characteristic write callback (for calibration commands)
-void BLEManager::onWrite(NimBLECharacteristic* pCharacteristic) {
-    if (pCharacteristic == pCalibrationChar) {
-        std::string value = pCharacteristic->getValue();
-        
-        if (value.length() >= 5) {  // 1 byte command + 4 bytes float
-            pendingCommand.commandType = value[0];
-            memcpy(&pendingCommand.value, &value[1], 4);
-            hasPendingCommand = true;
-            
-            Serial.printf("[BLEManager] Calibration command received: type=%d, value=%.2f\n",
-                         pendingCommand.commandType, pendingCommand.value);
-        }
+void BLEManager::onWrite(NimBLECharacteristic* c) {
+    if (c != _pCalChar) return;
+
+    std::string val = c->getValue();
+    if (val.length() < 5) {
+        Serial.println("[BLE] Calibration write too short — ignored");
+        return;
     }
+
+    _pendingCmd.commandType = val[0];
+    memcpy(&_pendingCmd.value, &val[1], 4);
+    _hasPendingCmd = true;
+
+    Serial.printf("[BLE] Cal command type=0x%02X value=%.2f\n",
+                  _pendingCmd.commandType, _pendingCmd.value);
 }
