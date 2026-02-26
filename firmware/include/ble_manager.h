@@ -1,8 +1,17 @@
 /**
- * AnimalDot Smart Bed - BLE Manager
- * 
+ * @file ble_manager.h
+ * @brief AnimalDot Smart Bed — BLE Manager
+ *
  * Handles Bluetooth Low Energy communication for streaming
  * vital signs and sensor data to the mobile application.
+ *
+ * Services advertised:
+ *   - Custom AnimalDot service  (sensor data + calibration)
+ *   - Standard Heart Rate 0x180D (compatibility with generic HR apps)
+ *
+ * Uses NimBLE for reduced flash footprint and improved stability.
+ *
+ * @version 2.0.0
  */
 
 #ifndef BLE_MANAGER_H
@@ -13,80 +22,100 @@
 #include "config.h"
 #include "sensor_manager.h"
 
-// Calibration command structure
+/* ---- Calibration Command --------------------------------------------- */
+
+/**
+ * @brief Over-the-air calibration command received from the mobile app.
+ *
+ * commandType:
+ *   0x01 — Tare weight (value ignored)
+ *   0x02 — Temperature offset (°C)
+ *   0x03 — Weight calibration factor
+ */
 struct CalibrationCommand {
-    uint8_t commandType;    // 0x01 = tare weight, 0x02 = temp offset, 0x03 = weight factor
-    float value;
+    uint8_t commandType;
+    float   value;
 };
 
-// Connection callback interface
+/* ---- Connection Callback Interface ----------------------------------- */
+
+/**
+ * @brief Abstract callback for BLE connection state changes.
+ */
 class BLEConnectionCallbacks {
 public:
-    virtual void onConnect() = 0;
+    virtual ~BLEConnectionCallbacks() = default;
+    virtual void onConnect()    = 0;
     virtual void onDisconnect() = 0;
 };
 
-class BLEManager : public NimBLEServerCallbacks, 
+/* ---- Class ----------------------------------------------------------- */
+
+class BLEManager : public NimBLEServerCallbacks,
                    public NimBLECharacteristicCallbacks {
 public:
     BLEManager();
-    
-    // Initialize BLE
+
+    /**
+     * @brief Initialise NimBLE, create services, start advertising.
+     * @return true on success.
+     */
     bool begin();
-    
-    // Update and notify connected clients
+
+    /** @name Data notification helpers (no-op when no client connected). */
+    ///@{
     void updateVitals(const VitalSigns& vitals);
     void updateEnvironment(const EnvironmentData& env);
     void updateWeight(const WeightData& weight);
     void updateStatus(const SensorStatus& status);
-    
-    // Stream raw geophone data (for debugging)
     void streamRawGeophone(int16_t sample);
-    
-    // Connection state
-    bool isConnected();
+    ///@}
+
+    /** @name Connection state */
+    ///@{
+    bool     isConnected();
     uint32_t getConnectionCount();
-    
-    // Set callback for connection events
-    void setConnectionCallback(BLEConnectionCallbacks* callback);
-    
-    // Get received calibration command (if any)
-    bool hasCalibrationCommand();
+    ///@}
+
+    /** @brief Register callback for connect / disconnect events. */
+    void setConnectionCallback(BLEConnectionCallbacks* cb);
+
+    /** @name Calibration commands from mobile app */
+    ///@{
+    bool               hasCalibrationCommand();
     CalibrationCommand getCalibrationCommand();
-    
+    ///@}
+
 private:
-    // NimBLE objects
-    NimBLEServer* pServer;
-    NimBLEService* pAnimalDotService;
-    NimBLEService* pHeartRateService;
-    
-    // Characteristics
-    NimBLECharacteristic* pHeartRateChar;
-    NimBLECharacteristic* pRespRateChar;
-    NimBLECharacteristic* pTemperatureChar;
-    NimBLECharacteristic* pHumidityChar;
-    NimBLECharacteristic* pWeightChar;
-    NimBLECharacteristic* pStatusChar;
-    NimBLECharacteristic* pCalibrationChar;
-    NimBLECharacteristic* pRawGeophoneChar;
-    NimBLECharacteristic* pStandardHRChar;
-    
-    // Connection state
-    uint32_t connectedClients;
-    BLEConnectionCallbacks* connectionCallback;
-    
-    // Calibration command buffer
-    CalibrationCommand pendingCommand;
-    bool hasPendingCommand;
-    
-    // Callbacks
-    void onConnect(NimBLEServer* pServer) override;
-    void onDisconnect(NimBLEServer* pServer) override;
-    void onWrite(NimBLECharacteristic* pCharacteristic) override;
-    
-    // Helper functions
-    void createServices();
-    void startAdvertising();
+    NimBLEServer*  _pServer;
+    NimBLEService* _pAnimalDotSvc;
+    NimBLEService* _pHeartRateSvc;
+
+    /* Characteristics */
+    NimBLECharacteristic* _pHRChar;
+    NimBLECharacteristic* _pRRChar;
+    NimBLECharacteristic* _pTempChar;
+    NimBLECharacteristic* _pHumChar;
+    NimBLECharacteristic* _pWeightChar;
+    NimBLECharacteristic* _pStatusChar;
+    NimBLECharacteristic* _pCalChar;
+    NimBLECharacteristic* _pRawGeoChar;
+    NimBLECharacteristic* _pStdHRChar;
+
+    /* State */
+    uint32_t              _connectedClients;
+    BLEConnectionCallbacks* _connectionCb;
+    CalibrationCommand    _pendingCmd;
+    bool                  _hasPendingCmd;
+
+    /* NimBLE callback overrides */
+    void onConnect(NimBLEServer* s)    override;
+    void onDisconnect(NimBLEServer* s) override;
+    void onWrite(NimBLECharacteristic* c) override;
+
+    /* Internal */
+    void _createServices();
+    void _startAdvertising();
 };
 
-#endif // BLE_MANAGER_H
+#endif /* BLE_MANAGER_H */
