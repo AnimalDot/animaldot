@@ -3,22 +3,36 @@
  * @brief AnimalDot Smart Bed — DSP Module
  *
  * Extracts heart rate (HR) and respiratory rate (RR) from raw
- * geophone vibration samples.  Processing pipeline:
+ * geophone vibration samples using amplitude-demodulation pipeline
+ * derived from the research paper:
  *
- *   1. Accumulate 2 s of 200 Hz samples (400 pts) in a ring buffer.
- *   2. Remove DC offset.
- *   3. Band-pass filter into HR band (0.67–3 Hz) and RR band (0.08–1 Hz).
- *   4. Peak-count in each band → beats/breaths per minute.
- *   5. Exponential smoothing to reject transients.
- *   6. Signal-quality metric (SNR-based, 0–1).
+ *   "Advanced Signal Processing and Machine Learning Methodologies
+ *    for Contactless Vital Sign Extraction via Bed-Mounted
+ *    Geophone Sensors"
  *
- * @version 2.0.0
+ * Processing pipeline:
+ *   1.  Accumulate 10 s of 200 Hz samples (2000 pts) in a ring buffer.
+ *   2.  Copy to float array, DC removal, Z-score normalization.
+ *   3.  Kurtosis-based movement artifact detection.
+ *   4.  Zero-phase biquad bandpass into HR band (0.67–3 Hz).
+ *   5.  Moving-RMS envelope extraction.
+ *   6.  Peak detection on envelope → inter-beat intervals (IBIs).
+ *   7.  Truncated statistics on IBIs → HR (bpm).
+ *   8.  Amplitude demodulation of envelope peaks → RR (brpm).
+ *   9.  Exponential smoothing.
+ *   10. Multi-feature signal quality metric.
+ *
+ * @version 3.0.0
  */
 
 #ifndef SIGNAL_PROCESSOR_H
 #define SIGNAL_PROCESSOR_H
 
-#include <Arduino.h>
+#include <cstdint>
+#include <cstddef>
+#if !defined(ANIMALDOT_CLANGD) && !defined(__clang__)
+#  include <Arduino.h>
+#endif
 #include "config.h"
 
 /* ---- Enumerations ---------------------------------------------------- */
@@ -42,7 +56,8 @@ struct VitalSigns {
     float         respiratoryRate;    /**< Breaths per minute             */
     float         signalQuality;      /**< 0.0 – 1.0                     */
     SignalQuality qualityLevel;
-    bool          isValid;            /**< true when qualityLevel ≥ FAIR  */
+    bool          isValid;            /**< true when qualityLevel >= FAIR */
+    bool          movementDetected;   /**< true when kurtosis > threshold */
     unsigned long timestamp;
 };
 
@@ -108,8 +123,12 @@ public:
 private:
     CircularBuffer<int16_t, GEOPHONE_BUFFER_SIZE> _sampleBuf;
 
-    float _hrFiltered[GEOPHONE_BUFFER_SIZE];
-    float _rrFiltered[GEOPHONE_BUFFER_SIZE];
+    /* Pre-allocated work buffers (avoid stack blowout on ESP32) */
+    float _rawFloat[GEOPHONE_BUFFER_SIZE];
+    float _envelope[GEOPHONE_BUFFER_SIZE];
+
+    /* Inter-beat interval storage */
+    float _ibis[MAX_BEATS_PER_WINDOW];
 
     float _signalMean;
     float _signalStdDev;
@@ -118,20 +137,21 @@ private:
     float _prevHR;
     float _prevRR;
 
-    /* DSP building blocks */
-    void  _applyBandpass(const int16_t* in, float* out,
-                         size_t len, float loHz, float hiHz);
-    float _detectPeakFreq(const float* sig, size_t len,
-                          float minHz, float maxHz);
-    float _calcSignalQuality(const float* sig, size_t len);
-    int   _countPeaks(const float* sig, size_t len, float threshold);
+    /* Research-paper pipeline methods */
+    float _computeKurtosis(const float* data, size_t len);
+    void  _computeEnvelope(const float* sig, float* env, size_t len);
+    int   _extractIBIs(const float* envelope, size_t len,
+                       float* ibis, int maxIbis);
+    float _trimmedMeanIBI(float* ibis, int count);
+    float _extractRespRate(const float* envelope, size_t len,
+                           const float* peakAmps, int peakCount);
+    void  _biquadFilter(float* data, size_t len, float loHz, float hiHz);
 
-    /* Helpers */
-    void  _butterworthBandpass(const float* in, float* out,
-                               size_t len, float lo, float hi, int order);
+    /* Statistical / utility helpers */
     float _mean(const float* d, size_t n);
     float _stddev(const float* d, size_t n, float m);
     float _rms(const float* d, size_t n);
+    float _calcSignalQuality(const float* sig, size_t len);
 };
 
 #endif /* SIGNAL_PROCESSOR_H */

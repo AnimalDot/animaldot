@@ -8,6 +8,7 @@
  */
 
 #include "settings_manager.h"
+#include "config.h"
 #include <cstring>
 
 /* ===================================================================== */

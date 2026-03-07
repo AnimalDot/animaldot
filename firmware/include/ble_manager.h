@@ -17,10 +17,40 @@
 #ifndef BLE_MANAGER_H
 #define BLE_MANAGER_H
 
-#include <Arduino.h>
-#include <NimBLEDevice.h>
-#include "config.h"
-#include "sensor_manager.h"
+#include <cstdint>
+
+/* Forward declarations when Arduino/NimBLE are not in include path (e.g. clangd) */
+class NimBLEServer;
+class NimBLEService;
+class NimBLECharacteristic;
+class NimBLEServerCallbacks;
+class NimBLECharacteristicCallbacks;
+struct VitalSigns;
+struct EnvironmentData;
+struct WeightData;
+struct SensorStatus;
+
+/* Real includes for PlatformIO (GCC); stubs when clangd parses (ANIMALDOT_CLANGD or __clang__). */
+#if !defined(ANIMALDOT_CLANGD) && !defined(__clang__)
+#  include <Arduino.h>
+#  include <NimBLEDevice.h>
+#  include "sensor_manager.h"
+#  define BLE_MANAGER_OVERRIDE override
+#else
+#  define BLE_MANAGER_OVERRIDE
+   /* Stub base classes for clangd (real defs from NimBLEDevice.h when building). */
+   class NimBLEServerCallbacks {
+   public:
+       virtual ~NimBLEServerCallbacks() = default;
+       virtual void onConnect(NimBLEServer* /*pServer*/) {}
+       virtual void onDisconnect(NimBLEServer* /*pServer*/) {}
+   };
+   class NimBLECharacteristicCallbacks {
+   public:
+       virtual ~NimBLECharacteristicCallbacks() = default;
+       virtual void onWrite(NimBLECharacteristic* /*pCharacteristic*/) {}
+   };
+#endif
 
 /* ---- Calibration Command --------------------------------------------- */
 
@@ -109,9 +139,9 @@ private:
     bool                  _hasPendingCmd;
 
     /* NimBLE callback overrides */
-    void onConnect(NimBLEServer* s)    override;
-    void onDisconnect(NimBLEServer* s) override;
-    void onWrite(NimBLECharacteristic* c) override;
+    void onConnect(NimBLEServer* s)    BLE_MANAGER_OVERRIDE;
+    void onDisconnect(NimBLEServer* s) BLE_MANAGER_OVERRIDE;
+    void onWrite(NimBLECharacteristic* c) BLE_MANAGER_OVERRIDE;
 
     /* Internal */
     void _createServices();

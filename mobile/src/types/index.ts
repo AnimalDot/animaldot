@@ -124,10 +124,30 @@ export interface User {
 export interface AppSettings {
   temperatureUnit: 'F' | 'C';
   weightUnit: 'lbs' | 'kg';
+  colorScheme: 'light' | 'dark' | 'system';
   notificationsEnabled: boolean;
   dataExportEnabled: boolean;
   bluetoothAutoConnect: boolean;
   lastConnectedDeviceId: string | null;
+}
+
+// Species / vital ranges (for entity re-exports)
+export interface VitalRanges {
+  heartRate: { min: number; max: number };
+  respiratoryRate: { min: number; max: number };
+  temperature: { min: number; max: number };
+}
+
+export type SpeciesClass = 'dog' | 'cat' | 'other';
+
+export const SPECIES_VITAL_RANGES: Record<SpeciesClass, VitalRanges> = {
+  dog: { heartRate: { min: 60, max: 120 }, respiratoryRate: { min: 15, max: 30 }, temperature: { min: 100, max: 102.5 } },
+  cat: { heartRate: { min: 120, max: 140 }, respiratoryRate: { min: 20, max: 30 }, temperature: { min: 100, max: 102.5 } },
+  other: { heartRate: { min: 60, max: 120 }, respiratoryRate: { min: 15, max: 30 }, temperature: { min: 99, max: 103 } },
+};
+
+export function getVitalRangesForPet(_species?: SpeciesClass | string): VitalRanges {
+  return SPECIES_VITAL_RANGES.dog;
 }
 
 // ============================================

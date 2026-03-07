@@ -63,7 +63,7 @@ const CalibrationModal: React.FC<CalibrationModalProps> = ({
       await onCalibrate(value);
       Alert.alert('Success', `${type === 'weight' ? 'Weight' : 'Temperature'} calibration completed.`);
       onClose();
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Calibration failed. Please try again.');
     } finally {
       setIsCalibrating(false);
@@ -198,7 +198,7 @@ export const DeviceStatusScreen: React.FC = () => {
     try {
       await BLEService.getInstance().startScan();
       Alert.alert('Scanning', 'Searching for AnimalDot devices...');
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to start scanning. Please check Bluetooth permissions.');
     }
   };
@@ -221,7 +221,7 @@ export const DeviceStatusScreen: React.FC = () => {
             try {
               await BLEService.getInstance().sendCalibrationCommand('tare', 0);
               Alert.alert('Success', 'Weight has been tared successfully.');
-            } catch (error) {
+            } catch {
               Alert.alert('Error', 'Failed to tare weight. Please try again.');
             } finally {
               setIsTaring(false);
@@ -301,7 +301,8 @@ export const DeviceStatusScreen: React.FC = () => {
   const formatLastUpdated = () => {
     if (!lastUpdated) return 'Never';
     const now = Date.now();
-    const diff = now - lastUpdated;
+    const ts = lastUpdated instanceof Date ? lastUpdated.getTime() : Number(lastUpdated);
+    const diff = now - ts;
     
     if (diff < 5000) return 'Just now';
     if (diff < 60000) return `${Math.floor(diff / 1000)} seconds ago`;

@@ -21,11 +21,32 @@
 #ifndef MQTT_MANAGER_H
 #define MQTT_MANAGER_H
 
-#include <Arduino.h>
-#include <WiFi.h>
-#include <PubSubClient.h>
-#include "config.h"
-#include "sensor_manager.h"
+/* Forward declarations so the header parses when Arduino libs are not in include path (e.g. clangd) */
+struct VitalSigns;
+struct EnvironmentData;
+struct WeightData;
+
+#include <cstdint>
+
+#if !defined(ANIMALDOT_CLANGD) && !defined(__clang__)
+#  include <Arduino.h>
+#  include <WString.h>
+#  include <WiFi.h>
+#  include <PubSubClient.h>
+#  include "sensor_manager.h"
+#else
+   /* Stub types for clangd (real defs from Arduino/WiFi/PubSubClient when building). */
+   class String {
+   public:
+       String() = default;
+       String(const char*) {}
+   };
+   class WiFiClient {};
+   class PubSubClient {
+   public:
+       bool connected() const { return false; }
+   };
+#endif
 
 /**
  * @brief MQTT connection state.
@@ -101,7 +122,7 @@ public:
 
 private:
     WiFiClient   _wifiClient;
-    PubSubClient _mqttClient;
+    mutable PubSubClient _mqttClient;  /* mutable: PubSubClient::connected() is non-const */
     MqttState    _state;
 
     String _host;

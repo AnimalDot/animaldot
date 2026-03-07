@@ -12,11 +12,11 @@ const char* password = "WiFi Password Here";
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
 
-const char* MQTT_BROKER = "test.mosquitto.org";
+const char* MQTT_BROKER = "sensorweb.us";
 const uint16_t MQTT_PORT = 1883;
 
-const char* TOPIC_TEMP_F = "12340987";
-const char* MQTT_CLIENT_ID = "esp32-dht20-12340987";
+const char* TOPIC_TEMP_F = "/sensorweb/DHT20/temperature";
+const char* MQTT_CLIENT_ID = "esp32-dht20-animaldot";
 
 Adafruit_AHTX0 aht;
 #define SDA_PIN 43

@@ -1,0 +1,18 @@
+-xc++
+-std=c++17
+-DARDUINO=1
+-Wno-unknown-pragmas
+-I
+/home/jalen/.platformio/packages/framework-arduinoespressif32/cores/esp32
+-I
+/home/jalen/.platformio/packages/framework-arduinoespressif32/libraries/BLE
+-I
+/home/jalen/.platformio/packages/framework-arduinoespressif32/libraries/WiFi/src
+-I
+/mnt/c/Users/jedus/Downloads/animaldot/firmware/include
+-I
+/mnt/c/Users/jedus/Downloads/animaldot/firmware/src
+-I
+/mnt/c/Users/jedus/Downloads/animaldot/firmware/.pio/libdeps/esp32dev/PubSubClient/src
+-I
+/mnt/c/Users/jedus/Downloads/animaldot/firmware/.pio/libdeps/esp32dev/DHT sensor library

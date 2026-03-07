@@ -26,7 +26,7 @@
  * =================================================================== */
 #define FIRMWARE_VERSION        "2.0.0"
 #define DEVICE_NAME             "AnimalDot_Bed"
-#define ORGANIZATION_NAME       "AnimalDot"   /**< MQTT topic prefix       */
+#define ORGANIZATION_NAME       "sensorweb"   /**< MQTT topic prefix       */
 
 /* ===================================================================
  * PIN DEFINITIONS — ESP32-DevKitC
@@ -77,7 +77,7 @@
 ///@{
 #define GEOPHONE_SAMPLE_RATE_HZ      200
 #define GEOPHONE_SAMPLE_INTERVAL_US  (1000000UL / GEOPHONE_SAMPLE_RATE_HZ)
-#define GEOPHONE_BUFFER_SIZE         (GEOPHONE_SAMPLE_RATE_HZ * 2)  /**< 2 s */
+#define GEOPHONE_BUFFER_SIZE         (GEOPHONE_SAMPLE_RATE_HZ * 10) /**< 10 s */
 ///@}
 
 /** @name Peripheral Update Intervals */
@@ -193,6 +193,15 @@
 #define MIN_PEAK_INTERVAL_MS         200       /**< Max ≈ 300 bpm          */
 #define SIGNAL_QUALITY_GOOD          0.7f
 #define SIGNAL_QUALITY_FAIR          0.4f
+
+/** @name Research-paper DSP constants (amplitude-demodulation pipeline) */
+///@{
+#define KURTOSIS_MOVEMENT_THRESHOLD  5.0f     /**< Kurtosis > 5 = movement */
+#define IBI_TRIM_FRACTION            0.1f     /**< Trim 10th/90th pctile   */
+#define ENVELOPE_WINDOW_SAMPLES      40       /**< 200 ms RMS at 200 Hz    */
+#define HR_UPDATE_INTERVAL_SEC       3        /**< Compute HR every 3 s    */
+#define MAX_BEATS_PER_WINDOW         40       /**< 180 bpm × 10 s / 60 pad */
+///@}
 
 /* ===================================================================
  * MQTT BINARY PAYLOAD LAYOUT (BedDot-compatible)

@@ -1,3 +1,19 @@
+# Allow more errors so IDE does not stop with "Too many errors emitted" when
+# Arduino/ESP32 headers are not in path (e.g. before running pio run -t compiledb).
+# Add local include dir so "signal_processor.h" etc. resolve when no compile_commands.json.
+# Remove GCC-only flags so clang (clangd) does not warn; real build uses GCC.
+CompileFlags:
+  Remove:
+    - -mlongcalls
+    - -fstrict-volatile-bitfields
+    - -fno-tree-switch-conversion
+  Add:
+    - -ferror-limit=0
+    - -Wno-unknown-arguments
+    - -DANIMALDOT_CLANGD=1
+    - -Iinclude
+    - -I../include
+
 # Fix clangd "expected exactly one compiler job in ''" for .ino files.
 # .ino files are not in compile_commands.json (PlatformIO builds src/ only),
 # so clangd has no compiler job. This gives .ino files a single job so they parse as C++.

@@ -2,5 +2,9 @@
 -std=c++17
 -DARDUINO=1
 -Wno-unknown-pragmas
--IC:\Users\jedus\.platformio\packages\framework-arduinoespressif32\cores\esp32
--IC:\Users\jedus\.platformio\packages\framework-arduinoespressif32\libraries\BLE
+-I
+/home/jalen/.platformio/packages/framework-arduinoespressif32/cores/esp32
+-I
+/home/jalen/.platformio/packages/framework-arduinoespressif32/libraries/BLE
+-I
+/home/jalen/.platformio/packages/framework-arduinoespressif32/libraries/WiFi/src

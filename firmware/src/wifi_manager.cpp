@@ -7,7 +7,8 @@
  * stores them in NVS (handled by the caller) and reboots.
  */
 
-#include "wifi_manager.h"
+#include "../include/wifi_manager.h"
+#include "../include/config.h"
 
 /* ---- Captive-portal HTML (minified) ---------------------------------- */
 
@@ -36,7 +37,7 @@ const char* WifiManager::_portalHTML = R"rawhtml(
     <label>WiFi Password</label>
     <input name="pass" type="password" placeholder="Password">
     <label>MQTT Broker</label>
-    <input name="mqtt" placeholder="sensorweb.us" value="sensorweb.us">
+    <input name="mqtt" placeholder="test.mosquitto.org" value="test.mosquitto.org">
     <label>Organization Name</label>
     <input name="org" placeholder="AnimalDot" value="AnimalDot">
     <button type="submit">Save &amp; Connect</button>

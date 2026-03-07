@@ -17,11 +17,27 @@
 #ifndef SENSOR_MANAGER_H
 #define SENSOR_MANAGER_H
 
-#include <Arduino.h>
-#include <Wire.h>
-#include <DHT.h>
-#include "config.h"
-#include "signal_processor.h"
+#include <cstdint>
+
+#if !defined(ANIMALDOT_CLANGD) && !defined(__clang__)
+#  include <Arduino.h>
+#  include <Wire.h>
+#  include <DHT.h>
+#  include "signal_processor.h"
+#else
+   /* Stub types for clangd (real defs from Arduino/DHT/signal_processor when building). */
+   enum SignalQuality : uint8_t { QUALITY_POOR = 0, QUALITY_FAIR = 1, QUALITY_GOOD = 2 };
+   struct VitalSigns {
+       float heartRate;
+       float respiratoryRate;
+       float signalQuality;
+       SignalQuality qualityLevel;
+       bool isValid;
+       unsigned long timestamp;
+   };
+   class DHT {};
+   class SignalProcessor {};
+#endif
 
 /* ---- Data Structures ------------------------------------------------- */
 

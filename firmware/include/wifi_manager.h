@@ -15,11 +15,20 @@
 #ifndef WIFI_MANAGER_H
 #define WIFI_MANAGER_H
 
+#include <cstdint>
+
+#if defined(ARDUINO) && defined(ARDUINO_ARCH_ESP32)
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
-#include "config.h"
+#else
+/* Forward declarations when Arduino/ESP32 not in include path (e.g. IDE/clangd) */
+class String;
+class IPAddress;
+class WebServer;
+class DNSServer;
+#endif
 
 /**
  * @brief WiFi operating mode reported by WifiManager.

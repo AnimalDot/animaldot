@@ -1,0 +1,19 @@
+{
+  "name": "animaldot",
+  "private": true,
+  "description": "AnimalDot Smart Bed — monorepo root",
+  "scripts": {
+    "test": "node scripts/test-all.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/mocha": "^10.0.10"
+  },
+  "dependencies": {
+    "mqtt": "^5.15.0",
+    "ws": "^8.19.0"
+  }
+}

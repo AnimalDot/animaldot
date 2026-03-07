@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(du -sh /mnt/c/Users/jedus/Downloads/animaldot/*/)",
+      "Bash(npm install mqtt 2>&1 | tail -5)"
+    ]
+  }
+}

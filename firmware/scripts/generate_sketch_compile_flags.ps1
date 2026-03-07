@@ -23,6 +23,9 @@ if (-not (Test-Path $coresEsp32)) {
 $commonFlags = @("-xc++", "-std=c++17", "-DARDUINO=1", "-Wno-unknown-pragmas", "-I", $coresEsp32)
 if (Test-Path $libBLE) { $commonFlags += "-I"; $commonFlags += $libBLE }
 
+$libWiFi = Join-Path $framework "libraries\WiFi\src"
+if (Test-Path $libWiFi) { $commonFlags += "-I"; $commonFlags += $libWiFi }
+
 $sketchDirs = Get-ChildItem -Path $sketchesDir -Directory -ErrorAction SilentlyContinue
 foreach ($dir in $sketchDirs) {
     $outPath = Join-Path $dir.FullName "compile_flags.txt"
@@ -30,4 +33,18 @@ foreach ($dir in $sketchDirs) {
     $lines | Set-Content -Path $outPath -Encoding utf8
     Write-Host "Wrote $outPath"
 }
-Write-Host "Done. Restart clangd or reopen the sketch so Arduino.h/BLE headers resolve."
+
+# Main firmware (include/ + src/) so clangd resolves Arduino.h, WiFiClient, PubSubClient, etc.
+$firmwareFlags = $commonFlags + @(
+    "-I", (Join-Path $firmwareDir "include"),
+    "-I", (Join-Path $firmwareDir "src")
+)
+$pubsubSrc = Join-Path $firmwareDir ".pio\libdeps\esp32dev\PubSubClient\src"
+if (Test-Path $pubsubSrc) { $firmwareFlags += "-I"; $firmwareFlags += $pubsubSrc }
+$dhtLib = Join-Path $firmwareDir ".pio\libdeps\esp32dev\DHT sensor library"
+if (Test-Path $dhtLib) { $firmwareFlags += "-I"; $firmwareFlags += $dhtLib }
+$firmwareFlagsPath = Join-Path $firmwareDir "compile_flags.txt"
+$firmwareFlags | Set-Content -Path $firmwareFlagsPath -Encoding utf8
+Write-Host "Wrote $firmwareFlagsPath (main firmware)"
+
+Write-Host "Done. Restart clangd or reopen files so Arduino.h/WiFiClient headers resolve."

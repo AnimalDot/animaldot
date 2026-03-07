@@ -22,7 +22,7 @@ let bleManager: any = undefined;
 
 function isExpoGo(): boolean {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires -- dynamic require for Expo Go detection
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- dynamic require for Expo Go detection
     const Constants = require('expo-constants').default;
     return Constants.appOwnership === 'expo';
   } catch {
@@ -38,7 +38,7 @@ function getBleManager(): any {
     return null;
   }
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires -- lazy load to avoid crash in Expo Go
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- lazy load to avoid crash in Expo Go
     const { BleManager } = require('react-native-ble-plx');
     bleManager = new BleManager();
   } catch (e) {
@@ -247,7 +247,7 @@ class AnimalDotBLEService {
           ? CalibrationCommand.SET_WEIGHT_FACTOR
           : commandOrKey === 'temperature' || commandOrKey === CalibrationCommand.SET_TEMP_OFFSET
             ? CalibrationCommand.SET_TEMP_OFFSET
-            : (commandOrKey as CalibrationCommand);
+            : (commandOrKey as unknown as CalibrationCommand);
     const buffer = Buffer.alloc(5);
     buffer.writeUInt8(cmd, 0);
     buffer.writeFloatLE(value, 1);

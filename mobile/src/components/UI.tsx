@@ -12,6 +12,7 @@ import {
   TextInput,
   ViewStyle,
   TextStyle,
+  StyleProp,
 } from 'react-native';
 
 // ============================================
@@ -102,7 +103,7 @@ export const Button: React.FC<ButtonProps> = ({
 
 interface CardProps {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   onPress?: () => void;
 }
 
@@ -180,7 +181,7 @@ interface MetricCardProps {
   subtitle?: string;
   icon?: React.ReactNode;
   color?: string;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
 export const MetricCard: React.FC<MetricCardProps> = ({

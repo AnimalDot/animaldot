@@ -13,9 +13,20 @@
 #ifndef SETTINGS_MANAGER_H
 #define SETTINGS_MANAGER_H
 
-#include <Arduino.h>
-#include <Preferences.h>
-#include "config.h"
+#include <cstdint>
+
+#if !defined(ANIMALDOT_CLANGD) && !defined(__clang__)
+#  include <Arduino.h>
+#  include <Preferences.h>
+#else
+   /* Stub types for clangd (real defs from Arduino/Preferences when building). */
+   class String {
+   public:
+       String() = default;
+       String(const char*) {}
+   };
+   class Preferences {};
+#endif
 
 /**
  * @brief Complete device settings persisted in NVS.

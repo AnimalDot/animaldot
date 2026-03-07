@@ -286,7 +286,7 @@ export const SettingsScreen: React.FC = () => {
           onPress: async () => {
             try {
               await BLEService.getInstance().disconnect();
-            } catch (error) {
+            } catch {
               // Ignore disconnect errors
             }
             logout();

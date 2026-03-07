@@ -51,6 +51,18 @@ export default defineConfig({
   build: {
     target: 'esnext',
     outDir: 'build',
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('react-dom')) return 'react';
+            if (id.includes('recharts')) return 'recharts';
+            return 'vendor';
+          }
+        },
+      },
+    },
   },
   server: {
     port: 3000,

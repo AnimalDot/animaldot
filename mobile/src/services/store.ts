@@ -207,22 +207,40 @@ export async function savePetsForUser(userId: string, pets: PetProfile[], active
 // Device & Connection Store
 // ============================================
 
+export interface MqttConfig {
+  brokerUrl: string;
+  org: string;
+  macHex: string;
+}
+
 interface DeviceState {
   devices: AnimalDotDevice[];
   connectedDeviceId: string | null;
   connectionState: BLEConnectionState;
+  dataSource: 'ble' | 'mqtt' | 'none';
+  mqttConfig: MqttConfig;
   addDevice: (device: AnimalDotDevice) => void;
   updateDevice: (id: string, updates: Partial<AnimalDotDevice>) => void;
   setConnectedDevice: (id: string | null) => void;
   setConnectionState: (state: BLEConnectionState) => void;
+  setDataSource: (source: 'ble' | 'mqtt' | 'none') => void;
+  setMqttConfig: (config: Partial<MqttConfig>) => void;
   clearDevices: () => void;
   clearAll: () => void;
 }
+
+const initialMqttConfig: MqttConfig = {
+  brokerUrl: 'ws://sensorweb.us:9001',
+  org: 'sensorweb',
+  macHex: '',
+};
 
 export const useDeviceStore = create<DeviceState>((set) => ({
   devices: [],
   connectedDeviceId: null,
   connectionState: 'disconnected',
+  dataSource: 'none',
+  mqttConfig: { ...initialMqttConfig },
   addDevice: (device) =>
     set((state) => {
       const exists = state.devices.some((d) => d.id === device.id);
@@ -247,12 +265,17 @@ export const useDeviceStore = create<DeviceState>((set) => ({
       connectionState: id ? 'connected' : 'disconnected',
     }),
   setConnectionState: (connectionState) => set({ connectionState }),
+  setDataSource: (dataSource) => set({ dataSource }),
+  setMqttConfig: (partial) =>
+    set((s) => ({ mqttConfig: { ...s.mqttConfig, ...partial } })),
   clearDevices: () => set({ devices: [] }),
   clearAll: () =>
     set({
       devices: [],
       connectedDeviceId: null,
       connectionState: 'disconnected',
+      dataSource: 'none',
+      mqttConfig: { ...initialMqttConfig },
     }),
 }));
 
@@ -371,6 +394,7 @@ interface SettingsState {
 export const DEFAULT_SETTINGS: AppSettings = {
   temperatureUnit: 'F',
   weightUnit: 'lbs',
+  colorScheme: 'system',
   notificationsEnabled: true,
   dataExportEnabled: true,
   bluetoothAutoConnect: true,

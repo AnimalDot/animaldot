@@ -55,11 +55,13 @@ Published measurements:
 
 ## Quick Start
 
+**Run all `pio` commands from the `firmware` directory** (not the repo root).
+
 ```bash
 # Install PlatformIO CLI (or use VS Code extension)
 pip install platformio
 
-# Build
+# Build (from repo root: cd into firmware first)
 cd firmware
 pio run
 
