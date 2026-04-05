@@ -153,7 +153,9 @@ final class SignalProcessor: ObservableObject {
 
         rpmHistory.append(breathsPerMin)
         if rpmHistory.count > kRPMHistoryMax { rpmHistory.removeFirst() }
-        currentRPM = vDSP.mean(rpmHistory)
+        var rpmMean: Double = 0
+        vDSP_meanvD(rpmHistory, 1, &rpmMean, vDSP_Length(rpmHistory.count))
+        currentRPM = rpmMean
     }
 
     // MARK: - Heart Rate (matches Python lines 222-255)
@@ -177,7 +179,9 @@ final class SignalProcessor: ObservableObject {
         if let bpm = chosen {
             bpmHistory.append(bpm)
             if bpmHistory.count > kBPMHistoryMax { bpmHistory.removeFirst() }
-            currentBPM = vDSP.mean(bpmHistory)
+            var bpmMean: Double = 0
+            vDSP_meanvD(bpmHistory, 1, &bpmMean, vDSP_Length(bpmHistory.count))
+            currentBPM = bpmMean
         } else {
             bpmHistory.removeAll()
             rpmHistory.removeAll()
