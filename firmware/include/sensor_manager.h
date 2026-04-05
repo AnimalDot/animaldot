@@ -23,6 +23,7 @@
 #  include <Arduino.h>
 #  include <Wire.h>
 #  include <DHT.h>
+#  include <FX29K.h>
 #  include "signal_processor.h"
 #else
    /* Stub types for clangd (real defs from Arduino/DHT/signal_processor when building). */
@@ -37,6 +38,17 @@
    };
    class DHT {};
    class SignalProcessor {};
+   class TwoWire;
+   enum FX29KType : uint8_t { FX29K0 = 0 };
+   class FX29K {
+   public:
+       void initFX29K(FX29KType, int, TwoWire*) {}
+       void tare(uint16_t) {}
+       uint16_t getRawBridgeData() { return 0; }
+       float getPounds() { return 0.0f; }
+       float getGrams() { return 0.0f; }
+       float getKilograms() { return 0.0f; }
+   };
 #endif
 
 /* ---- Data Structures ------------------------------------------------- */
@@ -128,9 +140,17 @@ public:
     /** @brief Raw 12-bit geophone sample centred around 0. */
     int16_t getRawGeophoneSample();
 
+    /**
+     * @brief If 100 geophone samples are ready for MQTT, copy them out once.
+     * @return true if out100 was filled (BedDot /geophone stream).
+     */
+    bool tryConsumeGeophoneMqttBlock(int32_t out100[100]);
+
 private:
     DHT              _dht;
     SignalProcessor  _signalProcessor;
+    FX29K            _fx29Primary;
+    bool             _fx29LibReady;
 
     /* Calibration */
     float _weightCalFactor;
@@ -152,6 +172,12 @@ private:
     float   _weightHistory[WEIGHT_HISTORY_LEN];
     uint8_t _weightHistIdx;
     bool    _checkWeightStability();
+
+    /* Geophone MQTT: 100-sample BedDot blocks at ADC rate */
+    int32_t _geoMqttBuf[100];
+    uint8_t _geoMqttFill;
+    bool    _geoMqttPending;
+    int32_t _geoMqttPendingBuf[100];
 
     /* FX29 I2C helpers */
     bool _initFX29(uint8_t address);

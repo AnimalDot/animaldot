@@ -173,6 +173,11 @@ void loop() {
      * ========================================================= */
     if (wifi.isConnected()) {
         mqtt.loop();
+        /* Stream raw geophone to MQTT (~2 blocks/s at 200 Hz) for dashboards */
+        int32_t geoBlk[100];
+        if (mqtt.isConnected() && sensors.tryConsumeGeophoneMqttBlock(geoBlk)) {
+            mqtt.publishGeophone100(geoBlk);
+        }
     }
 
     /* =========================================================

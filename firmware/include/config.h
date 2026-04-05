@@ -26,7 +26,7 @@
  * =================================================================== */
 #define FIRMWARE_VERSION        "2.0.0"
 #define DEVICE_NAME             "AnimalDot_Bed"
-#define ORGANIZATION_NAME       "sensorweb"   /**< MQTT topic prefix       */
+#define ORGANIZATION_NAME       "sensorweb"   /**< MQTT topic prefix (SensorWeb broker) */
 
 /* ===================================================================
  * PIN DEFINITIONS — ESP32-DevKitC
@@ -113,7 +113,7 @@
 /** @name Weight */
 ///@{
 #define WEIGHT_MAX_LBS          150.0f
-#define WEIGHT_CALIBRATION_FACTOR 420.0f      /**< Adjust during cal       */
+#define WEIGHT_CALIBRATION_FACTOR 1.0f        /**< FX29K reports pounds    */
 ///@}
 
 /** @name Temperature — normal dog body: 100–102.5 °F */
@@ -160,7 +160,7 @@
 #define WIFI_MAX_RETRY          5             /**< Then fall back to AP    */
 ///@}
 
-/** @name MQTT Defaults (BedDot-compatible broker) */
+/** @name MQTT Defaults (BedDot-compatible; UGA SensorWeb) */
 ///@{
 #define MQTT_BROKER_HOST        "sensorweb.us"
 #define MQTT_BROKER_PORT        1883

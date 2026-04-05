@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>AnimalDot</string>
+	<key>CFBundleDisplayName</key>
+	<string>AnimalDot</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.animaldot.app</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>AnimalDot uses Bluetooth to connect to your pet's BedDot sensor and stream vital signs in real time.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>AnimalDot uses Bluetooth to communicate with the BedDot sensor on your pet's bed.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>AnimalDot connects to your local MQTT broker to receive live geophone data from the BedDot sensor.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+	</array>
+</dict>
+</plist>

@@ -1,7 +1,7 @@
 /**
  * MQTT subscriber for BedDot geophone and DHT20 temperature data.
  *
- * - Connects to the sensorweb.us broker
+ * - Connects to MQTT_BROKER_URL (default: sensorweb.us)
  * - Decodes binary geophone payloads into a 30s circular buffer
  * - Processes vitals every 3 seconds via signal-processor
  * - Smooths BPM/RPM using a rolling history
@@ -158,7 +158,13 @@ function handleTemperatureMessage(payload: Buffer): void {
 }
 
 export async function startMqttSubscriber(): Promise<void> {
-  const { brokerUrl, topicGeophone, topicTemperature, geophoneDeviceId } = config.mqtt;
+  const { brokerUrl, topicGeophone, topicTemperature, geophoneDeviceId, org } = config.mqtt;
+
+  if (!/^[0-9a-fA-F]{12}$/.test(geophoneDeviceId)) {
+    console.warn(
+      '[MQTT] MQTT_GEOPHONE_DEVICE_ID should be 12 hex chars (ESP32 Wi‑Fi MAC, no colons) so topics match the firmware.',
+    );
+  }
 
   // Ensure device exists in DB
   try {
@@ -175,7 +181,7 @@ export async function startMqttSubscriber(): Promise<void> {
   });
 
   client.on('connect', () => {
-    console.log(`MQTT connected to ${brokerUrl}`);
+    console.log(`MQTT connected to ${brokerUrl} (org=${org})`);
     client.subscribe([topicGeophone, topicTemperature], (err) => {
       if (err) {
         console.error('MQTT subscribe error:', err);

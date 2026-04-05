@@ -65,7 +65,7 @@ interface BedDotState {
 const initialMqttConfig: MqttConfig = {
   brokerUrl: 'ws://sensorweb.us:9001',
   org: 'sensorweb',
-  macHex: '',
+  macHex: '3030f9723ae8',
 };
 
 export const useBedDotStore = create<BedDotState>((set) => ({

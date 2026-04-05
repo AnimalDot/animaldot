@@ -190,13 +190,11 @@ Or run each in its own terminal:
 
 ## 8. Testing the device when it’s not connected to your computer
 
-The firmware publishes to the MQTT broker (**sensorweb.us:1883**) on topics:
+By default the firmware publishes to the **UGA SensorWeb** broker (**`sensorweb.us:1883`**) with topic prefix **`sensorweb`** (`config.h` **`MQTT_BROKER_HOST`**, **`ORGANIZATION_NAME`** — match **`MQTT_BROKER_URL`** and **`MQTT_ORG`** in `backend/.env` if you change them). Topic pattern:
 
-- `/AnimalDot/<mac>/temperature` — BedDot binary
-- `/AnimalDot/<mac>/humidity` — BedDot binary  
-- `/AnimalDot/<mac>/debug` — JSON (human‑readable)
+- `/<org>/<mac>/<measurement>` — e.g. `/sensorweb/a1b2c3d4e5f6/geophone`, `heartrate`, `temperature`, etc.
 
-`<mac>` is the device WiFi MAC without colons, lowercased (e.g. `a1b2c3d4e5f6`). You can get it from serial at boot (WiFi test line) or from your router.
+`<mac>` is the device WiFi MAC without colons, lowercased (e.g. `a1b2c3d4e5f6`). You can get it from serial at boot (WiFi / MQTT line) or from your router.
 
 ### Option A: Subscribe to MQTT from your PC
 
@@ -205,21 +203,19 @@ From your computer you can watch live traffic to confirm the device is publishin
 **Using mosquitto_sub (if you have Mosquitto installed):**
 
 ```bash
-# All AnimalDot devices, all measurements (wildcard)
-mosquitto_sub -h sensorweb.us -p 1883 -t "/AnimalDot/+/#" -v
-
-# Or only debug (JSON) for easy reading
-mosquitto_sub -h sensorweb.us -p 1883 -t "/AnimalDot/+/debug" -v
+mosquitto_sub -h sensorweb.us -p 1883 -t "/sensorweb/+/#" -v
 ```
 
 **Using MQTT Explorer (GUI):**
 
 1. Download [MQTT Explorer](http://mqtt-explorer.com/) (or any MQTT client).
-2. Add connection: host `sensorweb.us`, port `1883`, no TLS.
-3. Subscribe to `/AnimalDot/#` (all AnimalDot topics).
-4. Power the device elsewhere; you should see messages every few seconds.
+2. Add connection: host `sensorweb.us`, port `1883`, no TLS (unless you configure otherwise).
+3. Subscribe to `/sensorweb/#` (or your `MQTT_ORG` value if you use a different broker).
+4. Power the device; you should see messages on the topics above.
 
-If you see messages, the device is successfully pushing to the server (broker). Your backend does not subscribe to this broker by default; it accepts vitals via **POST /api/vitals**. To get device data into the dashboard when the device is not connected, you’d add an MQTT subscriber in the backend that parses these topics and writes to the `vitals` table (or bridge the broker to your pipeline).
+If you see messages, the device is reaching the broker. The **backend** subscribes using `MQTT_TOPIC_GEOPHONE` / `MQTT_TOPIC_TEMPERATURE` (or defaults from `MQTT_ORG` + `MQTT_GEOPHONE_DEVICE_ID` in `.env`) and writes vitals when those topics match your bed’s MAC.
+
+**Note:** MQTT does not have a separate “register device” step — the device **appears** under `/sensorweb/<your-mac>/` when the ESP32 connects and publishes. If NVS still has an old MQTT host/org from a previous flash, clear it (factory reset / portal) or reflash so defaults apply.
 
 ### Option B: Backend API + dashboard
 

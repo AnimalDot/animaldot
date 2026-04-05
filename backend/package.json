@@ -8,6 +8,7 @@
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "db:migrate": "tsx src/db/migrate.ts",
+    "db:seed:dev": "tsx src/db/seed-dev-user.ts",
     "test": "node --import tsx --test src/services/auth.test.ts src/app.test.ts src/services/beddot-protocol.test.ts src/services/signal-processor.test.ts src/services/mqtt-subscriber.test.ts",
     "dev:print-vitals": "node --import tsx src/dev/print-vitals.ts",
     "lint": "eslint src/"

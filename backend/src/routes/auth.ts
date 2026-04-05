@@ -34,7 +34,7 @@ authRouter.post('/register', async (req: Request, res: Response) => {
     const refreshToken = issueRefreshToken(user.id);
     const refreshExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     await pool.query(
-      `INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+      `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, created_at) VALUES ($1, $2, $3, now())`,
       [user.id, hashRefreshToken(refreshToken), refreshExpires]
     );
     res.status(201).json({
@@ -72,7 +72,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
   const refreshToken = issueRefreshToken(user.id);
   const refreshExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   await pool.query(
-    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, created_at) VALUES ($1, $2, $3, now())`,
     [user.id, hashRefreshToken(refreshToken), refreshExpires]
   );
   res.json({
@@ -117,7 +117,7 @@ authRouter.post('/refresh', async (req: Request, res: Response) => {
   const newRefreshToken = issueRefreshToken(user.id);
   const refreshExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   await pool.query(
-    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, created_at) VALUES ($1, $2, $3, now())`,
     [user.id, hashRefreshToken(newRefreshToken), refreshExpires]
   );
   res.json({

@@ -1,0 +1,40 @@
+name: iOS Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mobile-ios/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'mobile-ios/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+
+      - name: Resolve Swift Package Manager dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project mobile-ios/AnimalDot.xcodeproj \
+            -scheme AnimalDot
+
+      - name: Build for simulator
+        run: |
+          xcodebuild build \
+            -project mobile-ios/AnimalDot.xcodeproj \
+            -scheme AnimalDot \
+            -sdk iphonesimulator \
+            -destination 'platform=iOS Simulator,name=iPhone 15' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO

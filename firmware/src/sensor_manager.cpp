@@ -8,6 +8,7 @@
  */
 
 #include "sensor_manager.h"
+#include <cstring>
 
 /** FX29 force-data read command byte. */
 static constexpr uint8_t FX29_CMD_READ_FORCE = 0x00;
@@ -21,14 +22,19 @@ SensorManager::SensorManager()
       _weightCalFactor(WEIGHT_CALIBRATION_FACTOR),
       _tempOffset(0.0f),
       _weightTare(0.0f),
+      _fx29LibReady(false),
       _lastDhtUpdate(0),
       _lastWeightUpdate(0),
       _lastGeophoneUpdate(0),
-      _weightHistIdx(0) {
+      _weightHistIdx(0),
+      _geoMqttFill(0),
+      _geoMqttPending(false) {
     memset(&_latestEnv,    0, sizeof(_latestEnv));
     memset(&_latestWeight, 0, sizeof(_latestWeight));
     memset(&_sensorStatus, 0, sizeof(_sensorStatus));
     memset(_weightHistory,  0, sizeof(_weightHistory));
+    memset(_geoMqttBuf,     0, sizeof(_geoMqttBuf));
+    memset(_geoMqttPendingBuf, 0, sizeof(_geoMqttPendingBuf));
 }
 
 /* ===================================================================== */
@@ -42,6 +48,12 @@ bool SensorManager::begin() {
     /* ---- I2C bus (shared by FX29 load cells) ---- */
     Wire.begin(I2C_SDA, I2C_SCL);
     Wire.setClock(400000);  /* Fast-mode 400 kHz */
+    if (_initFX29(LOADCELL_1_ADDR)) {
+        _fx29Primary.initFX29K(FX29K0, 100, &Wire);
+        _fx29Primary.tare(1000);
+        _fx29LibReady = true;
+        Serial.println("[Sensors] FX29K library initialised on 0x28");
+    }
 
     /* ---- DHT22 ---- */
     _dht.begin();
@@ -115,6 +127,16 @@ void SensorManager::updateGeophone() {
     /* 12-bit ADC centred: subtract 2048 so quiet = ~0 */
     int16_t sample = static_cast<int16_t>(analogRead(GEOPHONE_PIN) - 2048);
     _signalProcessor.addSample(sample);
+
+    /* Buffer 100 samples for MQTT /geophone (BedDot binary stream) */
+    _geoMqttBuf[_geoMqttFill++] = static_cast<int32_t>(sample);
+    if (_geoMqttFill >= 100) {
+        if (!_geoMqttPending) {
+            memcpy(_geoMqttPendingBuf, _geoMqttBuf, sizeof(_geoMqttBuf));
+            _geoMqttPending = true;
+        }
+        _geoMqttFill = 0;
+    }
 }
 
 void SensorManager::updateEnvironment() {
@@ -191,6 +213,10 @@ SensorStatus    SensorManager::getStatus()       { return _sensorStatus; }
 /* ===================================================================== */
 
 void SensorManager::tareWeight() {
+    if (_fx29LibReady) {
+        _fx29Primary.tare(1000);
+    }
+
     const uint8_t addrs[] = {
         LOADCELL_1_ADDR, LOADCELL_2_ADDR,
         LOADCELL_3_ADDR, LOADCELL_4_ADDR, LOADCELL_5_ADDR
@@ -224,6 +250,13 @@ int16_t SensorManager::getRawGeophoneSample() {
     return static_cast<int16_t>(analogRead(GEOPHONE_PIN) - 2048);
 }
 
+bool SensorManager::tryConsumeGeophoneMqttBlock(int32_t out100[100]) {
+    if (!_geoMqttPending) return false;
+    memcpy(out100, _geoMqttPendingBuf, 100 * sizeof(int32_t));
+    _geoMqttPending = false;
+    return true;
+}
+
 /* ===================================================================== */
 /* Weight stability                                                      */
 /* ===================================================================== */
@@ -249,6 +282,16 @@ bool SensorManager::_initFX29(uint8_t addr) {
 }
 
 bool SensorManager::_readFX29(uint8_t addr, float& force) {
+    if (addr == LOADCELL_1_ADDR && _fx29LibReady) {
+        force = _fx29Primary.getPounds();
+        if (!isfinite(force)) {
+            force = 0.0f;
+            return false;
+        }
+        force = constrain(force, 0.0f, 100.0f);
+        return true;
+    }
+
     Wire.beginTransmission(addr);
     Wire.write(FX29_CMD_READ_FORCE);
     if (Wire.endTransmission(false) != 0) { force = 0.0f; return false; }

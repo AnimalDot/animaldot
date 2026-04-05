@@ -101,7 +101,17 @@ vitalsRouter.get('/latest', requireAuth, async (req: Request, res: Response) => 
 
 vitalsRouter.post('/', requireAuth, async (req: Request, res: Response) => {
   const { userId } = (req as Request & { auth: { userId: string } }).auth;
-  const { deviceId, heartRate, respiratoryRate, temperatureF, weightLbs, signalQuality, qualityLevel } = req.body;
+  const {
+    deviceId,
+    heartRate,
+    respiratoryRate,
+    temperatureF,
+    weightLbs,
+    systolicMmhg,
+    diastolicMmhg,
+    signalQuality,
+    qualityLevel,
+  } = req.body;
   if (!deviceId) {
     res.status(400).json({ error: 'Bad request', message: 'deviceId required' });
     return;

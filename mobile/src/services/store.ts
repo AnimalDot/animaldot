@@ -232,7 +232,7 @@ interface DeviceState {
 const initialMqttConfig: MqttConfig = {
   brokerUrl: 'ws://sensorweb.us:9001',
   org: 'sensorweb',
-  macHex: '',
+  macHex: '3030f9723ae8',
 };
 
 export const useDeviceStore = create<DeviceState>((set) => ({

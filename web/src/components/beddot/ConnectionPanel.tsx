@@ -65,7 +65,7 @@ export default function ConnectionPanel({ onConnect, onDisconnect }: ConnectionP
       {dataSource === 'bridge' && (
         <div className="space-y-3">
           <div className="bg-[#3A7BFF]/10 text-[#3A7BFF] px-3 py-2 rounded-xl text-sm">
-            Connect to your local bridge (bridge.js) at ws://localhost:8080 — not sensorweb.us.
+            Connect to your local bridge (bridge.js) at ws://localhost:8080 — or MQTT over WebSockets to your broker.
           </div>
         </div>
       )}

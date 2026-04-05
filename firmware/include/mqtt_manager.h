@@ -12,7 +12,7 @@
  *   Bytes 21+   : data items   (int32 LE each)
  *
  * Topic pattern:  /<org>/<mac_hex>/<measurement>
- * Example:        /AnimalDot/aabbccddeeff/heartrate
+ * Example:        /sensorweb/aabbccddeeff/heartrate
  *
  * @see 03_API_D__Interacting_with_the_Backend_via_MQTT_docx.pdf
  * @version 2.0.0
@@ -112,6 +112,12 @@ public:
      * @brief Publish total weight (lbs × 10).
      */
     bool publishWeight(const WeightData& weight);
+
+    /**
+     * @brief Publish 100 raw geophone samples (BedDot int32 payload, ~420 B).
+     * Topic: /<org>/<mac>/geophone — matches backend + visual_vitals.py.
+     */
+    bool publishGeophone100(const int32_t* samples100);
 
     /**
      * @brief Publish a single named measurement value.

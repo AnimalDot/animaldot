@@ -12,6 +12,7 @@
  */
 
 #include "mqtt_manager.h"
+#include "config.h"
 #include <cstring>
 
 /* ===================================================================== */
@@ -44,7 +45,7 @@ bool MqttManager::begin(const String& host, uint16_t port,
     _mqttClient.setKeepAlive(MQTT_KEEPALIVE_SEC);
 
     /* PubSubClient has a 256 B default buffer — raise it for our payloads */
-    _mqttClient.setBufferSize(512);
+    _mqttClient.setBufferSize(512); /* geophone payload 20 + 400 B */
 
     Serial.printf("[MQTT] Broker %s:%u  Org: %s  MAC: %s\n",
                   _host.c_str(), _port, _org.c_str(), _macRaw.c_str());
@@ -98,6 +99,23 @@ bool MqttManager::publishWeight(const WeightData& weight) {
 
     int32_t wVal = static_cast<int32_t>(weight.totalWeight * 10.0f);
     return publishRaw("weight", wVal);
+}
+
+bool MqttManager::publishGeophone100(const int32_t* samples100) {
+    if (!_mqttClient.connected() || samples100 == nullptr) return false;
+
+    constexpr uint16_t n = 100;
+    uint8_t buf[MQTT_PAYLOAD_HEADER_SIZE + n * 4];
+
+    uint64_t tsUs = static_cast<uint64_t>(micros());
+    uint32_t intervalUs = GEOPHONE_SAMPLE_INTERVAL_US; /* 200 Hz */
+
+    _buildHeader(buf, n, tsUs, intervalUs);
+    for (uint16_t i = 0; i < n; i++) {
+        _appendItem(buf, MQTT_PAYLOAD_HEADER_SIZE + i * 4, samples100[i]);
+    }
+
+    return _publish("geophone", buf, sizeof(buf));
 }
 
 bool MqttManager::publishRaw(const char* measurement, int32_t value) {
