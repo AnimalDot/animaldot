@@ -12,6 +12,8 @@ workflows:
     scripts:
       - name: Build iOS app for physical device
         script: |
+          mkdir -p $PWD/mobile-ios/build/outputs
+          
           xcodebuild build \
             -project mobile-ios/AnimalDot.xcodeproj \
             -scheme AnimalDot \
@@ -24,7 +26,7 @@ workflows:
             -resolvePackageDependencies
       - name: Package into unsigned IPA
         script: |
-          cd mobile-ios/build/outputs
+          cd $PWD/mobile-ios/build/outputs
           mkdir -p Payload
           # Move the compiled .app into the Payload folder
           mv *.app Payload/
