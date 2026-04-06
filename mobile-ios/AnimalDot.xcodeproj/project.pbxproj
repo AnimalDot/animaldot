@@ -21,6 +21,12 @@
 		AA00000C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000C; };
 		AA00000D /* VitalsData.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000D; };
 		AA00000E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AB00000E; };
+		AA00000F /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000011; };
+		AA000010 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000012; };
+		AA000011 /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000013; };
+		AA000012 /* DevicePairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000014; };
+		AA000013 /* PetProfileSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000015; };
+		AA000014 /* CloudService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000016; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +46,12 @@
 		AB00000E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AB00000F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AB000010 /* AnimalDot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AnimalDot.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AB000011 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		AB000012 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
+		AB000013 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
+		AB000014 /* DevicePairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePairingView.swift; sourceTree = "<group>"; };
+		AB000015 /* PetProfileSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetProfileSetupView.swift; sourceTree = "<group>"; };
+		AB000016 /* CloudService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -66,6 +78,7 @@
 			children = (
 				AB000001 /* AnimalDotApp.swift */,
 				AB000002 /* ContentView.swift */,
+				AB000011 /* Theme.swift */,
 				AB00000F /* Info.plist */,
 				AB00000E /* Assets.xcassets */,
 				AD000003 /* Services */,
@@ -83,6 +96,7 @@
 				AB000003 /* MQTTService.swift */,
 				AB000004 /* BLEService.swift */,
 				AB000005 /* VitalsTransport.swift */,
+				AB000016 /* CloudService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -111,6 +125,10 @@
 				AB00000A /* DeviceSetupView.swift */,
 				AB00000B /* HistoryView.swift */,
 				AB00000C /* SettingsView.swift */,
+				AB000012 /* SplashView.swift */,
+				AB000013 /* AuthView.swift */,
+				AB000014 /* DevicePairingView.swift */,
+				AB000015 /* PetProfileSetupView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -219,6 +237,12 @@
 				AA00000B /* HistoryView.swift in Sources */,
 				AA00000C /* SettingsView.swift in Sources */,
 				AA00000D /* VitalsData.swift in Sources */,
+				AA00000F /* Theme.swift in Sources */,
+				AA000010 /* SplashView.swift in Sources */,
+				AA000011 /* AuthView.swift in Sources */,
+				AA000012 /* DevicePairingView.swift in Sources */,
+				AA000013 /* PetProfileSetupView.swift in Sources */,
+				AA000014 /* CloudService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

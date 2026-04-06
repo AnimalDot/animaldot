@@ -47,7 +47,8 @@ final class BLEService: NSObject, VitalsTransport {
     // MARK: - CoreBluetooth
 
     private var centralManager: CBCentralManager!
-    private var connectedPeripheral: CBPeripheral?
+    /// The currently connected peripheral (internal for calibration writes).
+    private(set) var connectedPeripheral: CBPeripheral?
     private var targetCharacteristic: CBCharacteristic?
     private var pendingConnectUUID: UUID?
     private var shouldAutoReconnect = false

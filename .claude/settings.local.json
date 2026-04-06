@@ -7,7 +7,8 @@
       "Bash(find mobile-ios/AnimalDot -name \"*.swift\" -exec wc -l {} +)",
       "Bash(find mobile-ios:*)",
       "Bash(ls mobile-ios/*.xcworkspace)",
-      "Bash(ls mobile-ios/*.xcodeproj)"
+      "Bash(ls mobile-ios/*.xcodeproj)",
+      "Bash(grep -E \"\\\\.swift$\")"
     ]
   }
 }

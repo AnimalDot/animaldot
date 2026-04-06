@@ -5,26 +5,26 @@ struct ContentView: View {
 
     var body: some View {
         TabView {
-            LiveMonitorView()
+            LiveDashboardView()
                 .tabItem {
-                    Label("Live", systemImage: "waveform.path.ecg")
+                    Label("Live", systemImage: "heart.fill")
                 }
 
-            DeviceSetupView()
+            TrendsView()
+                .tabItem {
+                    Label("Trends", systemImage: "chart.line.uptrend.xyaxis")
+                }
+
+            DeviceStatusView()
                 .tabItem {
                     Label("Device", systemImage: "antenna.radiowaves.left.and.right")
                 }
 
-            HistoryView()
-                .tabItem {
-                    Label("History", systemImage: "clock.arrow.circlepath")
-                }
-
             SettingsView()
                 .tabItem {
-                    Label("Settings", systemImage: "gearshape")
+                    Label("Settings", systemImage: "gearshape.fill")
                 }
         }
-        .tint(.red)
+        .tint(AppColors.primary)
     }
 }
