@@ -220,24 +220,21 @@ final class SignalProcessor: ObservableObject {
         guard let fftSetup = vDSP_create_fftsetupD(log2n, FFTRadix(kFFTRadix2)) else { return nil }
         defer { vDSP_destroy_fftsetupD(fftSetup) }
 
-        // Pack into split complex (real part = envelope, zero-padded)
+        // Pack real envelope (zero-padded to fftSize) for real FFT: pairs (x[2k], x[2k+1]) as one DSPDoubleComplex.
         var realPart = [Double](repeating: 0, count: fftSize)
         for i in 0 ..< n { realPart[i] = envelope[i] }
-        var imagPart = [Double](repeating: 0, count: fftSize)
 
-        // Convert to split complex for vDSP
         var splitReal = [Double](repeating: 0, count: fftSize / 2)
         var splitImag = [Double](repeating: 0, count: fftSize / 2)
 
-        // Interleaved -> split
+        // Interleaved (DSPDoubleComplex) -> split — vDSP_ctozD requires DSPDoubleComplex*, not DSPDoubleSplitComplex.
         realPart.withUnsafeBufferPointer { rBuf in
-            imagPart.withUnsafeBufferPointer { iBuf in
-                var interleaved = DSPDoubleSplitComplex(realp: UnsafeMutablePointer(mutating: rBuf.baseAddress!),
-                                                        imagp: UnsafeMutablePointer(mutating: iBuf.baseAddress!))
+            guard let rBase = rBuf.baseAddress else { return }
+            rBase.withMemoryRebound(to: DSPDoubleComplex.self, capacity: fftSize / 2) { interleaved in
                 splitReal.withUnsafeMutableBufferPointer { sr in
                     splitImag.withUnsafeMutableBufferPointer { si in
                         var split = DSPDoubleSplitComplex(realp: sr.baseAddress!, imagp: si.baseAddress!)
-                        vDSP_ctozD(&interleaved, 2, &split, 1, vDSP_Length(fftSize / 2))
+                        vDSP_ctozD(interleaved, 1, &split, 1, vDSP_Length(fftSize / 2))
                     }
                 }
             }
@@ -265,16 +262,15 @@ final class SignalProcessor: ObservableObject {
             }
         }
 
-        // Unpack split -> interleaved to get the ACF
+        // Unpack split -> interleaved DSPDoubleComplex (stored as fftSize doubles).
         var acfFull = [Double](repeating: 0, count: fftSize)
-        var acfImag = [Double](repeating: 0, count: fftSize)
         splitReal.withUnsafeMutableBufferPointer { sr in
             splitImag.withUnsafeMutableBufferPointer { si in
                 var split = DSPDoubleSplitComplex(realp: sr.baseAddress!, imagp: si.baseAddress!)
                 acfFull.withUnsafeMutableBufferPointer { ar in
-                    acfImag.withUnsafeMutableBufferPointer { ai in
-                        var inter = DSPDoubleSplitComplex(realp: ar.baseAddress!, imagp: ai.baseAddress!)
-                        vDSP_ztocD(&split, 1, &inter, 2, vDSP_Length(fftSize / 2))
+                    guard let aBase = ar.baseAddress else { return }
+                    aBase.withMemoryRebound(to: DSPDoubleComplex.self, capacity: fftSize / 2) { interleaved in
+                        vDSP_ztocD(&split, 1, interleaved, 1, vDSP_Length(fftSize / 2))
                     }
                 }
             }
