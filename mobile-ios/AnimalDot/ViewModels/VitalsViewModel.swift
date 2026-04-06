@@ -110,10 +110,14 @@ final class VitalsViewModel: ObservableObject {
         let transportRaw = defaults.string(forKey: Keys.transportType) ?? TransportType.mqtt.rawValue
         self.selectedTransport = TransportType(rawValue: transportRaw) ?? .mqtt
 
-        self.brokerHost = defaults.string(forKey: Keys.brokerHost) ?? "sensorweb.us"
+        let host = defaults.string(forKey: Keys.brokerHost) ?? "sensorweb.us"
         let storedPort = defaults.integer(forKey: Keys.brokerPort)
-        self.brokerPort = storedPort > 0 ? UInt16(storedPort) : 1883
-        self.macAddress = defaults.string(forKey: Keys.macAddress) ?? "3030f9723ae8"
+        let port: UInt16 = storedPort > 0 ? UInt16(storedPort) : 1883
+        let mac = defaults.string(forKey: Keys.macAddress) ?? "3030f9723ae8"
+
+        self.brokerHost = host
+        self.brokerPort = port
+        self.macAddress = mac
         self.bleCharacteristicUUID = defaults.string(forKey: Keys.bleCharUUID) ?? ""
 
         self.hrAlertLow = defaults.object(forKey: Keys.hrAlertLow) as? Double ?? 40
@@ -123,7 +127,7 @@ final class VitalsViewModel: ObservableObject {
         self.notificationsEnabled = defaults.object(forKey: Keys.notificationsEnabled) as? Bool ?? true
 
         // Create services
-        self.mqttService = MQTTService(host: brokerHost, port: brokerPort, mac: macAddress)
+        self.mqttService = MQTTService(host: host, port: port, mac: mac)
         self.bleService = BLEService()
 
         // Load saved sessions
