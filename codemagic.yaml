@@ -34,7 +34,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - jedus@animaldot.com
+          - j.edusei@icloud.com
         notify:
           success: false
           failure: true
