@@ -173,10 +173,11 @@ final class VitalsViewModel: ObservableObject {
         self.notificationsEnabled = defaults.object(forKey: Keys.notificationsEnabled) as? Bool ?? true
 
         // Load persisted user
-        self.currentUser = Self.loadUser()
+        let loadedUser = Self.loadUser()
+        self.currentUser = loadedUser
 
         // Load per-user data
-        let userId = self.currentUser?.id
+        let userId = loadedUser?.id
         self.petProfile = Self.loadPetProfile(userId: userId)
         self.appSettings = Self.loadAppSettings(userId: userId)
 
