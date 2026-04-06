@@ -10,31 +10,32 @@ workflows:
       cache_paths:
         - $HOME/Library/Developer/Xcode/DerivedData
     scripts:
-      - name: Set up code signing settings on Xcode project
-        script: |
-          xcodebuild -project mobile-ios/AnimalDot.xcodeproj \
-            -scheme AnimalDot \
-            -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            -destination 'generic/platform=iOS Simulator' \
-            -resolvePackageDependencies
-      - name: Build iOS app
+      - name: Build iOS app for physical device
         script: |
           xcodebuild build \
             -project mobile-ios/AnimalDot.xcodeproj \
             -scheme AnimalDot \
-            -sdk iphonesimulator \
-            -destination "platform=iOS Simulator,name=iPhone 16" \
+            -sdk iphoneos \
             -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CONFIGURATION_BUILD_DIR=$PWD/mobile-ios/build/outputs \
+            -resolvePackageDependencies
+      - name: Package into unsigned IPA
+        script: |
+          cd mobile-ios/build/outputs
+          mkdir -p Payload
+          # Move the compiled .app into the Payload folder
+          mv *.app Payload/
+          # Zip it into an .ipa file format
+          zip -r AnimalDot_Unsigned.ipa Payload/
     artifacts:
-      - mobile-ios/build/outputs/**
+      - mobile-ios/build/outputs/*.ipa
     publishing:
       email:
         recipients:
           - j.edusei@icloud.com
         notify:
-          success: false
+          success: true
           failure: true
