@@ -23,7 +23,7 @@ enum PacketParser {
     static func parseHeader(from data: Data) -> BedDotHeader? {
         guard data.count >= headerSize else { return nil }
 
-        let mac = data[data.startIndex ..< data.startIndex + 6]
+        let mac = Data(data[data.startIndex ..< data.startIndex + 6])
 
         let sampleCount: UInt16 = data.loadLittleEndian(fromByteOffset: 6)
         let timestamp: UInt64   = data.loadLittleEndian(fromByteOffset: 8)

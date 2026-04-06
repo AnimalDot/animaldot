@@ -215,7 +215,8 @@ final class SignalProcessor: ObservableObject {
 
         // Autocorrelation via FFT: ACF = IFFT(|FFT(x)|^2)
         let fftSize = nextPow2(2 * n)
-        let log2n = vDSP_Length(log2(Double(fftSize)))
+        // vDSP_Length has no Double initializer; fftSize is a power of two so log2 is an exact integer.
+        let log2n = vDSP_Length(UInt(log2(Double(fftSize))))
         guard let fftSetup = vDSP_create_fftsetupD(log2n, FFTRadix(kFFTRadix2)) else { return nil }
         defer { vDSP_destroy_fftsetupD(fftSetup) }
 
@@ -246,7 +247,7 @@ final class SignalProcessor: ObservableObject {
         splitReal.withUnsafeMutableBufferPointer { sr in
             splitImag.withUnsafeMutableBufferPointer { si in
                 var split = DSPDoubleSplitComplex(realp: sr.baseAddress!, imagp: si.baseAddress!)
-                vDSP_fft_zripD(fftSetup, &split, 1, log2n, FFTDirection(kFFTDirection_Forward))
+                vDSP_fft_zripD(fftSetup, &split, 1, log2n, Int32(1)) // forward (+1)
             }
         }
 
@@ -260,7 +261,7 @@ final class SignalProcessor: ObservableObject {
         splitReal.withUnsafeMutableBufferPointer { sr in
             splitImag.withUnsafeMutableBufferPointer { si in
                 var split = DSPDoubleSplitComplex(realp: sr.baseAddress!, imagp: si.baseAddress!)
-                vDSP_fft_zripD(fftSetup, &split, 1, log2n, FFTDirection(kFFTDirection_Inverse))
+                vDSP_fft_zripD(fftSetup, &split, 1, log2n, Int32(-1)) // inverse (-1)
             }
         }
 
