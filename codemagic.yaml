@@ -24,16 +24,22 @@ workflows:
             -resolvePackageDependencies
       - name: Package into unsigned IPA
         script: |
-          # 1. Dynamically find the .app file wherever Xcode put it
-          APP_PATH=$(find $PWD/mobile-ios/build_data/Build/Products -name "*.app" | head -n 1)
+          # Find the app folder dynamically from the project root
+          APP_PATH=$(find $PWD/mobile-ios -name "*.app" -type d | head -n 1)
           
-          # 2. Create clean output directories
+          # Stop the build if the app is missing
+          if [ -z "$APP_PATH" ]; then
+            echo "Error App file not found"
+            exit 1
+          fi
+          
+          # Create clean output directories
           mkdir -p $PWD/mobile-ios/outputs/Payload
           
-          # 3. Copy the found .app file into the Payload folder
+          # Copy the found app file into the Payload folder
           cp -R "$APP_PATH" $PWD/mobile-ios/outputs/Payload/
           
-          # 4. Navigate into the outputs folder and zip it into an .ipa
+          # Navigate into the outputs folder and zip it into an ipa
           cd $PWD/mobile-ios/outputs
           zip -r AnimalDot_Unsigned.ipa Payload/
     artifacts:
