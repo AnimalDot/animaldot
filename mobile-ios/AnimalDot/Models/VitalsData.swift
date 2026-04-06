@@ -47,7 +47,7 @@ struct AppUser: Identifiable, Codable, Equatable {
 // MARK: - Pet Profile
 
 struct PetProfile: Identifiable, Codable, Equatable {
-    let id: String
+    var id: String
     var name: String
     var breed: String
     var age: Int
