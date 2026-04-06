@@ -56,6 +56,7 @@ struct LiveDashboardView: View {
         case "ble": return "BLE"
         case "mqtt": return "MQTT"
         case "cloud": return "Cloud"
+        case "wifi": return "Wi-Fi"
         default: return "Disconnected"
         }
     }
@@ -131,7 +132,7 @@ struct LiveDashboardView: View {
     private var signalQualityCard: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(vm.dataSource == "ble" ? "\u{1F4E1}" : "\u{2601}\u{FE0F}")
+                Text(vm.dataSource == "ble" ? "\u{1F4E1}" : vm.dataSource == "wifi" ? "\u{1F4F6}" : "\u{2601}\u{FE0F}")
                 Text("Signal Quality: \(signalQualityText)")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(AppColors.text)
@@ -157,8 +158,9 @@ struct LiveDashboardView: View {
     private var dataSourceDetail: String {
         switch vm.dataSource {
         case "ble": return " \u{2014} direct Bluetooth connection"
-        case "mqtt": return " \u{2014} raw geophone processing"
+        case "mqtt": return " \u{2014} MQTT connection"
         case "cloud": return " \u{2014} streamed via BedDot system"
+        case "wifi": return " \u{2014} Wi-Fi connection"
         default: return ""
         }
     }
@@ -214,14 +216,6 @@ struct LiveDashboardView: View {
                 title: "Bed appears empty",
                 message: "Signal level is too low to detect vitals. The pet may not be on the bed.",
                 color: AppColors.warning
-            )
-        }
-
-        // MQTT info
-        if vm.dataSource == "mqtt" && !vm.bedEmpty {
-            infoBanner(
-                title: "MQTT Direct Processing",
-                message: "Processing raw geophone data locally. Vitals are computed on-device from the signal processor."
             )
         }
 

@@ -83,11 +83,9 @@ struct DevicePairingView: View {
                         .foregroundStyle(AppColors.textMuted)
                         .multilineTextAlignment(.center)
 
-                    #if DEBUG
-                    PrimaryButton(title: "Skip pairing (dev)", variant: .outline) {
+                    PrimaryButton(title: "Use Dev Mode (Wi-Fi)", variant: .outline) {
                         vm.skipDevicePairing()
                     }
-                    #endif
                 }
                 .padding(24)
             }

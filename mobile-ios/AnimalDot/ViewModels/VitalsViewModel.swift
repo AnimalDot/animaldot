@@ -112,6 +112,11 @@ final class VitalsViewModel: ObservableObject {
     @Published var isBLEScanning: Bool = false
     @Published var blePermissionReady: Bool = false
 
+    // MARK: - Dev Mode
+
+    @Published var devMode: Bool = false
+    private var devMockTimer: Timer?
+
     // MARK: - Internal
 
     private let processor = SignalProcessor()
@@ -250,6 +255,7 @@ final class VitalsViewModel: ObservableObject {
     }
 
     func logout() {
+        stopDevMode()
         disconnectTransport()
         cloudService.disconnectWebSocket()
         currentUser = nil
@@ -283,8 +289,70 @@ final class VitalsViewModel: ObservableObject {
 
     func skipDevicePairing() {
         UserDefaults.standard.set(true, forKey: Keys.hasCompletedPairing)
+        activateDevMode()
         let hasPet = !petProfile.name.isEmpty && petProfile.name != "Pet"
         currentScreen = hasPet ? .main : .petProfile
+    }
+
+    // MARK: - Dev Mode
+
+    func activateDevMode() {
+        devMode = true
+        connectionState = .connected
+        dataSource = "wifi"
+        signalQuality = 0.85
+
+        // Set all hardware components to connected
+        hardwareStatus.geophoneConnected = true
+        hardwareStatus.loadCellsConnected = true
+        hardwareStatus.temperatureSensorConnected = true
+        hardwareStatus.bluetoothConnected = true
+
+        // Generate initial mock values
+        generateMockVitals()
+
+        // Start periodic mock data updates (every 3 seconds)
+        devMockTimer?.invalidate()
+        devMockTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.generateMockVitals()
+            }
+        }
+    }
+
+    func stopDevMode() {
+        devMode = false
+        devMockTimer?.invalidate()
+        devMockTimer = nil
+    }
+
+    private func generateMockVitals() {
+        // Only set mock values if no real data is present
+        if currentBPM == nil || dataSource == "wifi" {
+            let mockHR = Double.random(in: 70...100)
+            currentBPM = mockHR
+            heartRateHistory.append(DataPoint(timestamp: Date(), value: mockHR))
+            if heartRateHistory.count > 1440 { heartRateHistory.removeFirst() }
+        }
+        if currentRPM == nil || dataSource == "wifi" {
+            let mockRR = Double.random(in: 18...26)
+            currentRPM = mockRR
+            respRateHistory.append(DataPoint(timestamp: Date(), value: mockRR))
+            if respRateHistory.count > 1440 { respRateHistory.removeFirst() }
+        }
+        if environment.temperature == nil || dataSource == "wifi" {
+            environment.temperature = Double.random(in: 100.5...101.8)
+            environment.humidity = Double.random(in: 40...60)
+            temperatureHistory.append(DataPoint(timestamp: Date(), value: environment.temperature!))
+            if temperatureHistory.count > 1440 { temperatureHistory.removeFirst() }
+        }
+        if weightData.weight == nil || dataSource == "wifi" {
+            weightData.weight = Double.random(in: 25...35)
+            weightData.isStable = true
+        }
+        signalQuality = Double.random(in: 0.75...0.95)
+        lastUpdate = Date()
+        bedEmpty = false
     }
 
     func completePetProfileSetup() {
@@ -297,6 +365,9 @@ final class VitalsViewModel: ObservableObject {
     // MARK: - Transport Management
 
     func connectTransport() {
+        // Stop dev mode when real transport connects
+        if devMode { stopDevMode() }
+
         disconnectTransport()
 
         switch selectedTransport {
@@ -387,7 +458,10 @@ final class VitalsViewModel: ObservableObject {
     }
 
     private func applyCloudVitals(_ payload: CloudVitalsPayload) {
-        if connectionState == .connected { return } // direct connection takes priority
+        if connectionState == .connected && !devMode { return } // direct connection takes priority
+
+        // Real cloud data overrides dev mode
+        if devMode { stopDevMode() }
 
         dataSource = "cloud"
         lastUpdate = Date()
@@ -533,6 +607,7 @@ final class VitalsViewModel: ObservableObject {
             .sink { [weak self] state in
                 self?.connectionState = state
                 if state == .connected {
+                    self?.stopDevMode()
                     self?.cloudService.disconnectWebSocket()
                 } else if state == .disconnected {
                     self?.startCloudFallback()

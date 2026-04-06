@@ -8,7 +8,7 @@ struct DeviceStatusView: View {
     @State private var isTaring = false
 
     private var isConnected: Bool {
-        vm.connectionState == .connected
+        vm.connectionState == .connected || vm.devMode
     }
 
     var body: some View {
