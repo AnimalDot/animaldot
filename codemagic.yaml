@@ -12,8 +12,6 @@ workflows:
     scripts:
       - name: Build iOS app for physical device
         script: |
-          mkdir -p $PWD/mobile-ios/build/outputs
-          
           xcodebuild build \
             -project mobile-ios/AnimalDot.xcodeproj \
             -scheme AnimalDot \
@@ -22,18 +20,24 @@ workflows:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            CONFIGURATION_BUILD_DIR=$PWD/mobile-ios/build/outputs \
+            -derivedDataPath $PWD/mobile-ios/build_data \
             -resolvePackageDependencies
       - name: Package into unsigned IPA
         script: |
-          cd $PWD/mobile-ios/build/outputs
-          mkdir -p Payload
-          # Move the compiled .app into the Payload folder
-          mv *.app Payload/
-          # Zip it into an .ipa file format
+          # 1. Dynamically find the .app file wherever Xcode put it
+          APP_PATH=$(find $PWD/mobile-ios/build_data/Build/Products -name "*.app" | head -n 1)
+          
+          # 2. Create clean output directories
+          mkdir -p $PWD/mobile-ios/outputs/Payload
+          
+          # 3. Copy the found .app file into the Payload folder
+          cp -R "$APP_PATH" $PWD/mobile-ios/outputs/Payload/
+          
+          # 4. Navigate into the outputs folder and zip it into an .ipa
+          cd $PWD/mobile-ios/outputs
           zip -r AnimalDot_Unsigned.ipa Payload/
     artifacts:
-      - mobile-ios/build/outputs/*.ipa
+      - mobile-ios/outputs/*.ipa
     publishing:
       email:
         recipients:
